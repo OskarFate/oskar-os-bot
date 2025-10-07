@@ -522,42 +522,127 @@ Soy tu asistente personal con IA para recordatorios y notas.
             await message.answer("❌ Error procesando mensaje. Usa `/help` para ver comandos disponibles.")
     
     def _is_reminder_request(self, text: str) -> bool:
-        """Detectar si un texto es una solicitud de recordatorio"""
+        """Detectar si un texto es una solicitud de recordatorio - VERSIÓN MEJORADA"""
+        
+        # Palabras clave para recordatorios en español
         reminder_keywords = [
-            "recuérdame", "recordar", "avísame", "avisar",
-            "en ", "mañana", "hoy", "después", "próxim",
-            "el ", "a las", "alarm", "alert",
-            "evaluación", "examen", "prueba", "control",
-            "entrega", "tarea", "trabajo", "informe",
-            "presentación", "fecha", "deadline"
+            # Comandos directos
+            "recuérdame", "recordar", "avísame", "avisar", "alerta", "alarma",
+            
+            # Expresiones temporales
+            "en ", "dentro de", "después de", "antes de",
+            "mañana", "hoy", "ayer", "pasado mañana", "anteayer",
+            "próxim", "siguiente", "que viene", "entrante",
+            "esta semana", "la próxima", "el otro", "la otra",
+            
+            # Días específicos
+            "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo",
+            "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+            
+            # Meses
+            "enero", "febrero", "marzo", "abril", "mayo", "junio",
+            "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+            "january", "february", "march", "april", "may", "june",
+            "july", "august", "september", "october", "november", "december",
+            
+            # Palabras académicas
+            "evaluación", "examen", "prueba", "control", "test", "quiz",
+            "entrega", "tarea", "trabajo", "informe", "proyecto", "ensayo",
+            "presentación", "exposición", "defensa", "seminario",
+            "fecha", "deadline", "vencimiento", "plazo",
+            
+            # Expresiones de tiempo
+            "a las", "al mediodía", "en la mañana", "en la tarde", "en la noche",
+            "por la mañana", "por la tarde", "por la noche",
+            "am", "pm", "hrs", "horas", "minutos", "segundos",
+            
+            # Palabras de acción que sugieren recordatorios
+            "hacer", "ir", "llamar", "enviar", "comprar", "pagar", "revisar",
+            "estudiar", "practicar", "ejercitar", "leer", "escribir"
         ]
         
-        # Detectar fechas en formato DD/MM/YYYY o DD/MM/YY
+        # Patrones de fecha numérica
         date_patterns = [
-            r'\b\d{1,2}/\d{1,2}/\d{4}\b',  # DD/MM/YYYY
-            r'\b\d{1,2}/\d{1,2}/\d{2}\b',  # DD/MM/YY
-            r'\b\d{1,2}-\d{1,2}-\d{4}\b',  # DD-MM-YYYY
+            r'\b\d{1,2}/\d{1,2}/\d{4}\b',          # DD/MM/YYYY
+            r'\b\d{1,2}/\d{1,2}/\d{2}\b',          # DD/MM/YY
+            r'\b\d{1,2}-\d{1,2}-\d{4}\b',          # DD-MM-YYYY
+            r'\b\d{1,2}\.\d{1,2}\.\d{4}\b',        # DD.MM.YYYY
+            r'\b\d{4}/\d{1,2}/\d{1,2}\b',          # YYYY/MM/DD
+            r'\b\d{1,2}:\d{2}\b',                  # HH:MM
+            r'\b\d{1,2}h\d{2}\b',                  # 14h30
+            r'\b\d{1,2}:\d{2}(am|pm)\b',           # 2:30pm
+        ]
+        
+        # Patrones académicos específicos
+        academic_patterns = [
             r'fecha de entrega',
             r'entregar el',
-            r'para el'
+            r'para el',
+            r'deadline',
+            r'vence el',
+            r'hasta el',
+            r'antes del',
+            r'\b\d+%\s+\w+',                      # 25% RA1-2-3
+            r'ra\d+-\d+-\d+',                     # RA1-2-3
+            r'evaluaci[óo]n\s+\w+',               # evaluación escrita
+            r'examen\s+\w+',                      # examen final
+        ]
+        
+        # Patrones de tiempo relativo
+        time_relative_patterns = [
+            r'en\s+\d+\s+(segundo|minuto|hora|día|semana|mes|año)s?',
+            r'dentro\s+de\s+\d+',
+            r'después\s+de\s+\d+',
+            r'hace\s+\d+',
+            r'el\s+(próximo|siguiente|otro)',
+            r'la\s+(próxima|siguiente|otra)',
+            r'este\s+(lunes|martes|miércoles|jueves|viernes|sábado|domingo)',
+            r'esta\s+(semana|tarde|mañana|noche)',
         ]
         
         text_lower = text.lower()
         
-        # Si tiene palabras clave académicas
-        has_academic_keywords = any(keyword in text_lower for keyword in reminder_keywords)
+        # 1. Verificar palabras clave de recordatorio
+        has_reminder_keywords = any(keyword in text_lower for keyword in reminder_keywords)
         
-        # Si tiene patrones de fecha
+        # 2. Verificar patrones de fecha numérica
         has_date_pattern = any(re.search(pattern, text_lower) for pattern in date_patterns)
         
-        # Si tiene fechas numéricas
-        has_numeric_date = re.search(r'\b\d{1,2}/\d{1,2}/\d{2,4}\b', text)
+        # 3. Verificar patrones académicos
+        has_academic_pattern = any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in academic_patterns)
         
-        # Es recordatorio si tiene:
-        # 1. Palabras clave, O
-        # 2. Patrón de fecha académica, O 
-        # 3. Fecha numérica + texto académico
-        return has_academic_keywords or has_date_pattern or (has_numeric_date and len(text) > 10)
+        # 4. Verificar patrones de tiempo relativo
+        has_time_relative = any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in time_relative_patterns)
+        
+        # 5. Verificar si tiene estructura de recordatorio (longitud mínima y contexto)
+        has_context = len(text.split()) >= 2 and len(text) > 5
+        
+        # 6. Detectar fechas numéricas con contexto
+        has_numeric_date = re.search(r'\b\d{1,2}/\d{1,2}/\d{2,4}\b', text)
+        has_action_context = any(word in text_lower for word in ["hacer", "ir", "llamar", "revisar", "estudiar", "pagar", "comprar"])
+        
+        # Es recordatorio si cumple cualquiera de estos criterios:
+        # - Tiene palabras clave específicas de recordatorio
+        # - Tiene patrones de fecha + contexto de acción
+        # - Tiene patrones académicos
+        # - Tiene tiempo relativo + contexto
+        # - Tiene fecha numérica + suficiente contexto
+        
+        is_reminder = (
+            has_reminder_keywords or
+            (has_date_pattern and has_action_context) or
+            has_academic_pattern or
+            (has_time_relative and has_context) or
+            (has_numeric_date and len(text) > 15)
+        )
+        
+        # Log para debugging
+        if is_reminder:
+            logger.info(f"📝 Detectado como recordatorio: keywords={has_reminder_keywords}, "
+                       f"date={has_date_pattern}, academic={has_academic_pattern}, "
+                       f"relative={has_time_relative}, context={has_context}")
+        
+        return is_reminder
     
     async def _process_reminder_request(self, message: Message, reminder_input: str):
         """Procesar solicitud de recordatorio - Usa IA inteligente con fallback"""

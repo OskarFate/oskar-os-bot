@@ -85,40 +85,67 @@ class AIInterpreter:
             return basic_result
         
         # Usar IA para casos complejos
-        system_prompt = f"""Eres un experto en interpretar expresiones temporales en español, incluyendo formatos complejos y académicos.
+        system_prompt = f"""Eres un experto en interpretar expresiones temporales en español chileno, incluyendo lenguaje coloquial y formatos académicos.
 
-Fecha y hora actual: {current_time.strftime('%Y-%m-%d %H:%M:%S UTC')}
+Fecha y hora actual: {current_time.strftime('%Y-%m-%d %H:%M:%S UTC')} (Chile: América/Santiago)
 
 Tu tarea: Convertir la expresión temporal del usuario a formato ISO8601 UTC.
 
 CASOS QUE DEBES MANEJAR:
-1. Formatos básicos: "en 10 segundos", "mañana a las 9"
-2. Fechas en español: "5 OCTUBRE 2025", "26 DE OCTUBRE 2025"
-3. Formatos DD/MM/YYYY: "12/09/2025"
-4. Texto académico: "FECHA DE ENTREGA: 5 OCTUBRE 2025"
-5. Rangos: "A PARTIR DEL 10 DE NOVIEMBRE"
-6. Mayúsculas/minúsculas mezcladas
+
+1. LENGUAJE NATURAL SIMPLE:
+   - "en 5 minutos", "dentro de 2 horas", "en 30 segundos"
+   - "mañana", "hoy", "pasado mañana", "ayer"
+   - "esta tarde", "esta noche", "esta mañana"
+   - "el lunes", "el próximo viernes", "la próxima semana"
+
+2. LENGUAJE COLOQUIAL CHILENO:
+   - "pasado mañana", "el otro lunes", "la otra semana"
+   - "al tiro" (inmediato), "al rato" (en un rato)
+   - "en la once" (17:00), "en la mañana temprano" (07:00)
+
+3. HORARIOS ESPECÍFICOS:
+   - "a las 18:00", "a las 9", "al mediodía", "a medianoche"
+   - "en la mañana" (09:00), "en la tarde" (15:00), "en la noche" (20:00)
+   - "7:30 am", "3:15 pm", "14h30"
+
+4. FECHAS ACADÉMICAS:
+   - "FECHA DE ENTREGA: 5 OCTUBRE 2025"
+   - "para el 15/10/2025", "el 25 de diciembre"
+   - "antes del 30 de noviembre"
+
+5. EXPRESIONES VAGAS (darles contexto útil):
+   - "mañana" sin hora → 09:00
+   - "esta semana" → próximo día laboral a las 09:00
+   - "pronto" → en 1 hora
 
 MESES EN ESPAÑOL:
 ENERO=01, FEBRERO=02, MARZO=03, ABRIL=04, MAYO=05, JUNIO=06,
 JULIO=07, AGOSTO=08, SEPTIEMBRE=09, OCTUBRE=10, NOVIEMBRE=11, DICIEMBRE=12
 
-Reglas:
-1. Responde SOLO con la fecha en formato: YYYY-MM-DDTHH:MM:SSZ
-2. Si no hay hora específica, usa 09:00 para horarios generales
-3. Para "FECHA DE ENTREGA" usa 23:59 (final del día)
-4. Para "noche" usa 20:00, para "tarde" usa 15:00
-5. Para rangos de fechas, usa la fecha de inicio
-6. Si la expresión es ambigua, elige la interpretación más próxima en el futuro
-7. Si no puedes interpretarla, responde: ERROR
+DÍAS DE LA SEMANA:
+LUNES=Monday, MARTES=Tuesday, MIÉRCOLES=Wednesday, JUEVES=Thursday, 
+VIERNES=Friday, SÁBADO=Saturday, DOMINGO=Sunday
 
-Ejemplos:
-Usuario: "en 10 segundos" -> {(current_time + timedelta(seconds=10)).strftime('%Y-%m-%dT%H:%M:%SZ')}
-Usuario: "mañana a las 9" -> {(current_time + timedelta(days=1)).replace(hour=9, minute=0, second=0).strftime('%Y-%m-%dT%H:%M:%SZ')}
-Usuario: "el 25 de octubre a las 18:00" -> 2025-10-25T18:00:00Z
-Usuario: "FECHA DE ENTREGA: 5 OCTUBRE 2025" -> 2025-10-05T23:59:00Z
-Usuario: "26 DE OCTUBRE 2025" -> 2025-10-26T09:00:00Z
-Usuario: "A PARTIR DEL 10 DE NOVIEMBRE 2025" -> 2025-11-10T09:00:00Z"""
+Reglas importantes:
+1. Responde SOLO con la fecha en formato: YYYY-MM-DDTHH:MM:SSZ
+2. Si no hay hora específica, usa horarios lógicos:
+   - Trabajo/estudio: 09:00
+   - Entregas/deadlines: 23:59
+   - Llamadas/reuniones: 10:00
+   - Ejercicio: 18:00
+   - Comidas: 12:00 (almuerzo), 20:00 (cena)
+3. Siempre elige fechas FUTURAS (nunca en el pasado)
+4. Para rangos, usa la fecha de inicio
+5. Si no puedes interpretarla claramente, responde: ERROR
+
+Ejemplos específicos:
+Usuario: "recuérdame en 5 segundos ir a dormir" → {(current_time + timedelta(seconds=5)).strftime('%Y-%m-%dT%H:%M:%SZ')}
+Usuario: "mañana a las 8 ir al gym" → {(current_time + timedelta(days=1)).replace(hour=8, minute=0, second=0).strftime('%Y-%m-%dT%H:%M:%SZ')}
+Usuario: "el viernes llamar a mamá" → [próximo viernes a las 10:00]
+Usuario: "esta tarde revisar email" → [hoy a las 15:00]
+Usuario: "en 2 horas y media" → {(current_time + timedelta(hours=2, minutes=30)).strftime('%Y-%m-%dT%H:%M:%SZ')}
+Usuario: "pasado mañana hacer compras" → [dentro de 2 días a las 10:00]"""
 
         messages = [
             {"role": "system", "content": system_prompt},
