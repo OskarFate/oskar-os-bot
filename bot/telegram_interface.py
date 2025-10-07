@@ -560,85 +560,134 @@ Soy tu asistente personal con IA para recordatorios y notas.
         return has_academic_keywords or has_date_pattern or (has_numeric_date and len(text) > 10)
     
     async def _process_reminder_request(self, message: Message, reminder_input: str):
-        """Procesar solicitud de recordatorio - SIEMPRE usa IA con prompt específico"""
+        """Procesar solicitud de recordatorio - Usa IA inteligente con fallback"""
         try:
             # Mostrar mensaje de procesamiento
             processing_msg = await message.answer("🤖 Interpretando con IA...")
             
-            # SIEMPRE usar el prompt especializado de múltiples recordatorios
-            # Este prompt maneja tanto casos simples como complejos
+            # PRIMERO: Intentar con prompt académico (múltiples recordatorios)
             reminders = await self.ai_interpreter.parse_multiple_reminders(reminder_input)
             
-            if not reminders:
+            if reminders:
+                # Crear recordatorios usando el método múltiple
+                created_count = 0
+                failed_count = 0
+                
+                for reminder_data in reminders:
+                    try:
+                        # Mejorar texto del recordatorio individual
+                        context = await self.memory_index.get_user_context(message.from_user.id, limit=3)
+                        enhanced_text = await self.ai_interpreter.enhance_reminder_text(reminder_data['text'], context)
+                        
+                        # Crear recordatorio
+                        success = await self.reminder_manager.create_reminder(
+                            user_id=message.from_user.id,
+                            original_input=reminder_data['text'],
+                            reminder_text=enhanced_text,
+                            target_date=reminder_data['date']
+                        )
+                        
+                        if success:
+                            created_count += 1
+                            # Agregar a memoria
+                            await self.memory_index.add_context(
+                                message.from_user.id,
+                                f"Creó recordatorio: {enhanced_text[:50]}",
+                                "reminder_creation"
+                            )
+                        else:
+                            # Verificar si fue rechazado por fecha pasada
+                            from datetime import datetime
+                            if reminder_data['date'] <= datetime.utcnow():
+                                logger.warning(f"⚠️ Recordatorio rechazado por fecha pasada: {reminder_data['text']}")
+                            failed_count += 1
+                            
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error creando recordatorio individual: {e}")
+                        failed_count += 1
+                
+                # Respuesta final
+                if created_count > 0:
+                    if created_count == 1:
+                        # Un solo recordatorio
+                        reminder_data = reminders[0]
+                        date_str = format_datetime_for_user(reminder_data['date'])
+                        result_text = f"✅ **Recordatorio creado**\n\n📝 {reminder_data['text']}\n📅 {date_str}\n\n⏰ Incluye pre-recordatorios automáticos"
+                    else:
+                        # Múltiples recordatorios
+                        result_text = f"✅ **{created_count} recordatorios creados**\n\n"
+                        for i, reminder_data in enumerate(reminders[:created_count], 1):
+                            date_str = format_datetime_for_user(reminder_data['date'])
+                            result_text += f"{i}. {reminder_data['text']}\n   📅 {date_str}\n\n"
+                        result_text += "⏰ Todos incluyen pre-recordatorios automáticos"
+                    
+                    if failed_count > 0:
+                        result_text += f"\n\n⚠️ {failed_count} recordatorios no se pudieron crear (fechas pasadas o errores)"
+                
+                    await processing_msg.edit_text(result_text, parse_mode="Markdown")
+                    return
+                else:
+                    # Si no se creó ninguno con método múltiple, intentar método simple
+                    pass
+            
+            # SEGUNDO: Si el método académico falló, usar método de lenguaje natural
+            logger.info("🔄 Método académico falló, intentando con lenguaje natural...")
+            target_date = await self.ai_interpreter.interpret_time_expression(reminder_input)
+            
+            if not target_date:
                 await processing_msg.edit_text(
-                    "❌ **No pude interpretar las fechas**\n\n"
+                    "❌ **No pude interpretar el tiempo**\n\n"
                     "Ejemplos válidos:\n"
-                    "• `Evaluación escrita 12/09/2025`\n"
-                    "• `FECHA DE ENTREGA: 5 OCTUBRE 2025`\n"
-                    "• `Tarea para el 15/10/2025`\n\n"
-                    "Intenta ser más específico con la fecha.",
+                    "• 'recuérdame en 30 minutos'\n" 
+                    "• 'mañana a las 9'\n"
+                    "• 'el 25 de octubre a las 15:00'\n"
+                    "• 'Evaluación escrita 12/09/2025'\n\n"
+                    "Intenta ser más específico con la fecha y hora.",
                     parse_mode="Markdown"
                 )
                 return
             
-            # Crear recordatorios
-            created_count = 0
-            failed_count = 0
+            # Mejorar texto del recordatorio
+            context = await self.memory_index.get_user_context(message.from_user.id, limit=3)
+            enhanced_text = await self.ai_interpreter.enhance_reminder_text(reminder_input, context)
             
-            for reminder_data in reminders:
-                try:
-                    # Mejorar texto del recordatorio individual
-                    context = await self.memory_index.get_user_context(message.from_user.id, limit=3)
-                    enhanced_text = await self.ai_interpreter.enhance_reminder_text(reminder_data['text'], context)
-                    
-                    # Crear recordatorio
-                    success = await self.reminder_manager.create_reminder(
-                        user_id=message.from_user.id,
-                        original_input=reminder_data['text'],
-                        reminder_text=enhanced_text,
-                        target_date=reminder_data['date']
-                    )
-                    
-                    if success:
-                        created_count += 1
-                        # Agregar a memoria
-                        await self.memory_index.add_context(
-                            message.from_user.id,
-                            f"Creó recordatorio: {enhanced_text[:50]}",
-                            "reminder_creation"
-                        )
-                    else:
-                        # Verificar si fue rechazado por fecha pasada
-                        from datetime import datetime
-                        if reminder_data['date'] <= datetime.utcnow():
-                            logger.warning(f"⚠️ Recordatorio rechazado por fecha pasada: {reminder_data['text']}")
-                        failed_count += 1
-                        
-                except Exception as e:
-                    logger.warning(f"⚠️ Error creando recordatorio individual: {e}")
-                    failed_count += 1
+            # Crear recordatorio único
+            success = await self.reminder_manager.create_reminder(
+                user_id=message.from_user.id,
+                original_input=reminder_input,
+                reminder_text=enhanced_text,
+                target_date=target_date
+            )
             
-            # Respuesta final
-            if created_count > 0:
-                if created_count == 1:
-                    # Un solo recordatorio
-                    reminder_data = reminders[0]
-                    date_str = format_datetime_for_user(reminder_data['date'])
-                    result_text = f"✅ **Recordatorio creado**\n\n📝 {reminder_data['text']}\n📅 {date_str}\n\n⏰ Incluye pre-recordatorios automáticos"
-                else:
-                    # Múltiples recordatorios
-                    result_text = f"✅ **{created_count} recordatorios creados**\n\n"
-                    for i, reminder_data in enumerate(reminders[:created_count], 1):
-                        date_str = format_datetime_for_user(reminder_data['date'])
-                        result_text += f"{i}. {reminder_data['text']}\n   📅 {date_str}\n\n"
-                    result_text += "⏰ Todos incluyen pre-recordatorios automáticos"
+            if success:
+                date_str = format_datetime_for_user(target_date)
                 
-                if failed_count > 0:
-                    result_text += f"\n\n⚠️ {failed_count} recordatorios no se pudieron crear (fechas pasadas o errores)"
+                await processing_msg.edit_text(
+                    f"✅ **Recordatorio creado**\n\n"
+                    f"📝 {enhanced_text}\n"
+                    f"📅 {date_str}\n\n"
+                    f"⏰ Incluye pre-recordatorios automáticos",
+                    parse_mode="Markdown"
+                )
+                
+                # Agregar a memoria
+                await self.memory_index.add_context(
+                    message.from_user.id,
+                    f"Creó recordatorio: {enhanced_text[:50]}",
+                    "reminder_creation"
+                )
             else:
-                result_text = f"❌ No se pudieron crear los recordatorios. Verifica que las fechas sean futuras."
-            
-            await processing_msg.edit_text(result_text, parse_mode="Markdown")
+                # Verificar si fue rechazado por fecha pasada
+                from datetime import datetime
+                if target_date <= datetime.utcnow():
+                    await processing_msg.edit_text(
+                        "❌ **La fecha ya pasó**\n\n"
+                        f"📅 La fecha {format_datetime_for_user(target_date)} ya pasó.\n\n"
+                        "Por favor, elige una fecha en el futuro.",
+                        parse_mode="Markdown"
+                    )
+                else:
+                    await processing_msg.edit_text("❌ Error creando recordatorio. Intenta de nuevo.")
             
         except Exception as e:
             logger.error(f"❌ Error procesando recordatorio: {e}")
