@@ -1,33 +1,56 @@
-# Docker configuration for OskarOS Assistant Bot
-FROM python:3.11-slim
+# OskarOS Assistant Bot - Production Docker Image
+# Multi-stage build for optimization
+FROM python:3.13-slim as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first for better caching
+# Copy requirements and install dependencies
 COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Production stage
+FROM python:3.13-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create app directory
+WORKDIR /app
+
+# Copy dependencies from builder stage
+COPY --from=builder /root/.local /root/.local
 
 # Copy application code
 COPY . .
 
 # Create non-root user for security
-RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
+RUN groupadd -g 1000 botuser && \
+    useradd -r -u 1000 -g botuser botuser && \
+    chown -R botuser:botuser /app
+
+# Switch to non-root user
 USER botuser
 
-# Expose port (if needed for health checks)
-EXPOSE 8000
+# Make sure scripts are executable
+ENV PATH=/root/.local/bin:$PATH
+
+# Expose port for health server
+EXPOSE 8080
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
 
 # Run the bot
 CMD ["python", "main.py"]

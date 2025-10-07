@@ -1,0 +1,54 @@
+name: oskaros-assistant-bot
+region: nyc1
+services:
+- name: bot-service
+  source_dir: /
+  dockerfile_path: Dockerfile
+  github:
+    repo: OskarFate/oskar-os-bot
+    branch: main
+    deploy_on_push: true
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  http_port: 8080
+  routes:
+  - path: /health
+  health_check:
+    http_path: /health
+    initial_delay_seconds: 30
+    period_seconds: 60
+    timeout_seconds: 10
+    failure_threshold: 3
+    success_threshold: 1
+  envs:
+  - key: TELEGRAM_BOT_TOKEN
+    scope: RUN_TIME
+    type: SECRET
+  - key: OPENROUTER_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: MONGODB_URI
+    scope: RUN_TIME
+    type: SECRET
+  - key: MONGODB_DB_NAME
+    scope: RUN_TIME
+    value: oskaros_bot
+  - key: TIMEZONE
+    scope: RUN_TIME
+    value: America/Mexico_City
+  - key: LOG_LEVEL
+    scope: RUN_TIME
+    value: INFO
+  - key: ENVIRONMENT
+    scope: RUN_TIME
+    value: production
+  - key: PORT
+    scope: RUN_TIME
+    value: "8080"
+alerts:
+- rule: CPU_UTILIZATION
+  disabled: false
+- rule: MEM_UTILIZATION
+  disabled: false
+- rule: RESTART_COUNT
+  disabled: false
