@@ -84,68 +84,152 @@ class AIInterpreter:
             logger.info(f"⚡ Interpretación básica exitosa: {user_input} -> {basic_result}")
             return basic_result
         
-        # Usar IA para casos complejos
-        system_prompt = f"""Eres un experto en interpretar expresiones temporales en español chileno, incluyendo lenguaje coloquial y formatos académicos.
+        # Usar IA para casos complejos - SISTEMA ULTRA COMPLETO
+        system_prompt = f"""Eres un experto ULTRA-INTELIGENTE en interpretar expresiones temporales en español chileno, incluyendo lenguaje coloquial, académico, profesional, y casos extremos.
 
 Fecha y hora actual: {current_time.strftime('%Y-%m-%d %H:%M:%S UTC')} (Chile: América/Santiago)
 
-Tu tarea: Convertir la expresión temporal del usuario a formato ISO8601 UTC.
+Tu tarea: Convertir CUALQUIER expresión temporal del usuario a formato ISO8601 UTC.
 
-CASOS QUE DEBES MANEJAR:
+CASOS QUE DEBES MANEJAR (SÚPER COMPLETOS):
 
-1. LENGUAJE NATURAL SIMPLE:
-   - "en 5 minutos", "dentro de 2 horas", "en 30 segundos"
-   - "mañana", "hoy", "pasado mañana", "ayer"
-   - "esta tarde", "esta noche", "esta mañana"
-   - "el lunes", "el próximo viernes", "la próxima semana"
+1. LENGUAJE NATURAL BÁSICO:
+   - "en X segundos/minutos/horas/días/semanas/meses/años"
+   - "mañana", "hoy", "pasado mañana", "ayer", "anteayer"
+   - "esta tarde", "esta noche", "esta mañana", "esta madrugada"
+   - "el lunes", "el próximo viernes", "la próxima semana", "el mes que viene"
 
-2. LENGUAJE COLOQUIAL CHILENO:
-   - "pasado mañana", "el otro lunes", "la otra semana"
-   - "al tiro" (inmediato), "al rato" (en un rato)
-   - "en la once" (17:00), "en la mañana temprano" (07:00)
+2. LENGUAJE COLOQUIAL CHILENO EXTREMO:
+   - "pasado mañana", "el otro lunes", "la otra semana", "el próximo año"
+   - "al tiro" (inmediato, +30 seg), "al rato" (en 1-2 horas), "altiro", "altoque"
+   - "lueguito" (30-60 min), "ratito" (15-30 min), "cachito" (5-15 min)
+   - "tempranito" (07:00), "en la once" (17:00), "en la mañanita" (06:00)
+   - "yapo" (ya), "bacán" (contexto positivo), "cachái"
 
-3. HORARIOS ESPECÍFICOS:
-   - "a las 18:00", "a las 9", "al mediodía", "a medianoche"
-   - "en la mañana" (09:00), "en la tarde" (15:00), "en la noche" (20:00)
-   - "7:30 am", "3:15 pm", "14h30"
+3. HORARIOS ESPECÍFICOS Y FORMATOS INTERNACIONALES:
+   - "a las 18:00", "a las 9", "al mediodía", "a medianoche", "al amanecer", "al atardecer"
+   - "en la mañana" (09:00), "en la tarde" (15:00), "en la noche" (20:00), "en la madrugada" (03:00)
+   - "7:30 am", "3:15 pm", "14h30", "15:45hs", "2 pm", "8:30AM", "22:00hrs"
+   - "quarter past 3" (15:15), "half past 5" (17:30), "10 to 8" (19:50)
+   - "o'clock", "sharp", "en punto", "exacto"
 
-4. FECHAS ACADÉMICAS:
-   - "FECHA DE ENTREGA: 5 OCTUBRE 2025"
-   - "para el 15/10/2025", "el 25 de diciembre"
-   - "antes del 30 de noviembre"
+4. FECHAS ACADÉMICAS Y PROFESIONALES:
+   - "FECHA DE ENTREGA: 5 OCTUBRE 2025", "DUE DATE: Oct 15"
+   - "para el 15/10/2025", "el 25 de diciembre", "25-10-2025", "2025-10-25"
+   - "antes del 30 de noviembre", "deadline: Nov 30", "cutoff: Friday"
+   - "submission by Monday", "hand in before Tuesday"
+   - "hasta el fin de mes", "end of month", "EOM", "Q1", "H1"
 
-5. EXPRESIONES VAGAS (darles contexto útil):
-   - "mañana" sin hora → 09:00
-   - "esta semana" → próximo día laboral a las 09:00
-   - "pronto" → en 1 hora
+5. EXPRESIONES VAGAS PERO CONTEXTUALES:
+   - "pronto" (en 1 hora), "más tarde" (en 2-3 horas), "después" (en 1-2 horas)
+   - "luego" (en 30-60 min), "soon" (en 1 hora), "later" (en 2 horas)
+   - "eventually" (en 1 día), "cuando pueda" (mañana 10:00)
+   - "si tengo tiempo" (fin de semana), "algún día de estos" (en 3 días)
+   - "esta semana" (próximo día laboral), "este mes" (próximo lunes)
 
-MESES EN ESPAÑOL:
-ENERO=01, FEBRERO=02, MARZO=03, ABRIL=04, MAYO=05, JUNIO=06,
-JULIO=07, AGOSTO=08, SEPTIEMBRE=09, OCTUBRE=10, NOVIEMBRE=11, DICIEMBRE=12
+6. FORMATOS DE FECHA MÚLTIPLES:
+   - DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, MM/DD/YYYY, YYYY-MM-DD, YYYY/MM/DD
+   - "Oct 15", "15 Oct", "October 15th", "15th of October", "15 de octubre"
+   - "Q1 2025" (marzo 31), "H1 2025" (junio 30), "EOY" (diciembre 31)
+   - "primer semestre", "segundo trimestre", "fin de año"
 
-DÍAS DE LA SEMANA:
-LUNES=Monday, MARTES=Tuesday, MIÉRCOLES=Wednesday, JUEVES=Thursday, 
-VIERNES=Friday, SÁBADO=Saturday, DOMINGO=Sunday
+7. RANGOS Y PERÍODOS COMPLEJOS:
+   - "entre las 2 y 3" (14:00), "de 9 a 11" (09:00), "from 2 to 4" (14:00)
+   - "desde el lunes hasta el viernes" (lunes 09:00)
+   - "toda esta semana" (lunes actual), "todo el mes" (día 1 del mes siguiente)
+   - "durante el verano", "en invierno", "época de exámenes"
 
-Reglas importantes:
+8. EVENTOS RECURRENTES Y FRECUENCIA:
+   - "todos los lunes" (próximo lunes), "cada viernes" (próximo viernes)
+   - "diariamente" (mañana misma hora), "semanalmente" (próxima semana)
+   - "mensualmente" (próximo mes), "anualmente" (próximo año)
+   - "every Monday", "daily", "weekly", "monthly"
+
+9. EXPRESIONES ACADÉMICAS ESPECÍFICAS:
+   - "mitad del semestre", "final de cuatrimestre", "inicio de clases"
+   - "período de exámenes", "semana de pruebas", "vacaciones"
+   - "inscripciones", "matrícula", "titulación", "graduación"
+   - "semestre de otoño", "trimestre de primavera"
+
+10. CONTEXTOS PROFESIONALES:
+    - "fin de trimestre fiscal", "cierre contable", "audit time"
+    - "revisión anual", "performance review", "appraisal"
+    - "sprint review", "daily standup", "retrospective"
+    - "release date", "go-live", "deployment", "launch"
+
+11. DÍAS FESTIVOS Y ESPECIALES (CHILE):
+    - "Fiestas Patrias" (18 septiembre), "Año Nuevo" (1 enero)
+    - "Día del Trabajador" (1 mayo), "Navidad" (25 diciembre)
+    - "Semana Santa" (abril variable), "día libre" (próximo feriado)
+    - "Halloween" (31 octubre), "San Valentín" (14 febrero)
+
+12. EXPRESIONES MÉDICAS Y PERSONALES:
+    - "cada 8 horas" (medicamentos), "en ayunas" (mañana temprano)
+    - "después de comer" (+1 hora de comida), "antes de dormir" (22:00)
+    - "control mensual", "cita médica", "chequeo anual"
+
+MESES EN ESPAÑOL Y ABREVIACIONES:
+ENERO/ENE/JAN=01, FEBRERO/FEB=02, MARZO/MAR=03, ABRIL/ABR/APR=04, 
+MAYO/MAY=05, JUNIO/JUN=06, JULIO/JUL=07, AGOSTO/AGO/AUG=08, 
+SEPTIEMBRE/SEP/SEPT=09, OCTUBRE/OCT=10, NOVIEMBRE/NOV=11, DICIEMBRE/DIC/DEC=12
+
+DÍAS DE LA SEMANA Y ABREVIACIONES:
+LUNES/LUN/MON=Monday, MARTES/MAR/TUE=Tuesday, MIÉRCOLES/MIE/WED=Wednesday, 
+JUEVES/JUE/THU=Thursday, VIERNES/VIE/FRI=Friday, SÁBADO/SAB/SAT=Saturday, 
+DOMINGO/DOM/SUN=Sunday
+
+REGLAS SÚPER ESPECÍFICAS:
 1. Responde SOLO con la fecha en formato: YYYY-MM-DDTHH:MM:SSZ
-2. Si no hay hora específica, usa horarios lógicos:
-   - Trabajo/estudio: 09:00
-   - Entregas/deadlines: 23:59
-   - Llamadas/reuniones: 10:00
-   - Ejercicio: 18:00
-   - Comidas: 12:00 (almuerzo), 20:00 (cena)
+2. Horarios lógicos por defecto ULTRA ESPECÍFICOS:
+   - Trabajo/oficina/estudio/clases: 09:00
+   - Entregas/deadlines académicos: 23:59
+   - Llamadas/contacto/reuniones: 10:00
+   - Ejercicio/gym/deporte: 07:00 (mañana) o 18:00 (tarde)
+   - Compras/trámites/banco/supermercado: 10:00
+   - Médico/dentista/consultas médicas: 10:00
+   - Comidas: 08:00 (desayuno), 13:00 (almuerzo), 20:00 (cena)
+   - Medicamentos: 08:00, 14:00, 20:00 (cada 8 horas)
+   - Limpieza/casa/arreglos: 10:00 (días laborales), 14:00 (fin de semana)
+   - Entretenimiento/social/fiestas: 19:00
+   - Estudiar/leer/tareas: 16:00 (después del trabajo/clases)
+   - Videoconferencias/calls: 15:00
+   - Presentaciones/exposiciones: 11:00
+   - Exámenes/pruebas: 09:00
+   - Proyectos/informes: 16:00
+   - Cumpleaños/celebraciones: 19:00
 3. Siempre elige fechas FUTURAS (nunca en el pasado)
-4. Para rangos, usa la fecha de inicio
-5. Si no puedes interpretarla claramente, responde: ERROR
+4. Para rangos, usa la fecha/hora de inicio o más temprana
+5. Si la expresión es ambigua, usa el contexto más probable
+6. Para expresiones inmediatas ("al tiro", "ya", "now"), usa +30 segundos
+7. Si no puedes interpretar claramente, responde: ERROR
 
-Ejemplos específicos:
+EJEMPLOS EXTREMOS Y SÚPER COMPLEJOS:
 Usuario: "recuérdame en 5 segundos ir a dormir" → {(current_time + timedelta(seconds=5)).strftime('%Y-%m-%dT%H:%M:%SZ')}
 Usuario: "mañana a las 8 ir al gym" → {(current_time + timedelta(days=1)).replace(hour=8, minute=0, second=0).strftime('%Y-%m-%dT%H:%M:%SZ')}
 Usuario: "el viernes llamar a mamá" → [próximo viernes a las 10:00]
 Usuario: "esta tarde revisar email" → [hoy a las 15:00]
-Usuario: "en 2 horas y media" → {(current_time + timedelta(hours=2, minutes=30)).strftime('%Y-%m-%dT%H:%M:%SZ')}
-Usuario: "pasado mañana hacer compras" → [dentro de 2 días a las 10:00]"""
+Usuario: "en 2 horas y media estudiar" → {(current_time + timedelta(hours=2, minutes=30)).strftime('%Y-%m-%dT%H:%M:%SZ')}
+Usuario: "pasado mañana hacer compras" → [dentro de 2 días a las 10:00]
+Usuario: "al tiro comprar pan" → [en 30 segundos]
+Usuario: "lueguito llamar al jefe" → [en 45 minutos a las XX:XX]
+Usuario: "en la once tomar té" → [hoy a las 17:00]
+Usuario: "quarter past 3 meeting" → [hoy a las 15:15]
+Usuario: "deadline Oct 15th" → [15 octubre a las 23:59]
+Usuario: "every monday standup" → [próximo lunes a las 10:00]
+Usuario: "end of month report" → [último día del mes a las 23:59]
+Usuario: "Q1 review meeting" → [31 marzo a las 09:00]
+Usuario: "cumple de María 15 nov" → [15 noviembre a las 19:00]
+Usuario: "between 2 and 3 pm call" → [hoy a las 14:00]
+Usuario: "tempranito ejercitar" → [mañana a las 07:00]
+Usuario: "cuando pueda arreglar esto" → [mañana a las 10:00]
+Usuario: "fin de semana limpiar casa" → [sábado a las 14:00]
+Usuario: "toda esta semana estudiar" → [lunes actual a las 16:00]
+Usuario: "after lunch take pills" → [hoy a las 14:00]
+Usuario: "first thing tomorrow morning" → [mañana a las 08:00]
+Usuario: "end of business day Friday" → [viernes a las 18:00]
+Usuario: "sometime next week" → [lunes próxima semana a las 09:00]
+Usuario: "before the weekend" → [viernes a las 17:00]
+Usuario: "early next month" → [día 3 del próximo mes a las 09:00]"""
 
         messages = [
             {"role": "system", "content": system_prompt},

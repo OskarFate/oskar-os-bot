@@ -522,82 +522,211 @@ Soy tu asistente personal con IA para recordatorios y notas.
             await message.answer("❌ Error procesando mensaje. Usa `/help` para ver comandos disponibles.")
     
     def _is_reminder_request(self, text: str) -> bool:
-        """Detectar si un texto es una solicitud de recordatorio - VERSIÓN MEJORADA"""
+        """Detectar si un texto es una solicitud de recordatorio - VERSIÓN ULTRA COMPLETA"""
         
         # Palabras clave para recordatorios en español
         reminder_keywords = [
             # Comandos directos
             "recuérdame", "recordar", "avísame", "avisar", "alerta", "alarma",
+            "notifícame", "notificar", "alertar", "programar", "agendar",
             
-            # Expresiones temporales
-            "en ", "dentro de", "después de", "antes de",
+            # Expresiones temporales básicas
+            "en ", "dentro de", "después de", "antes de", "desde", "hasta",
             "mañana", "hoy", "ayer", "pasado mañana", "anteayer",
-            "próxim", "siguiente", "que viene", "entrante",
+            "próxim", "siguiente", "que viene", "entrante", "venidero",
             "esta semana", "la próxima", "el otro", "la otra",
             
-            # Días específicos
+            # Expresiones de tiempo chilenas/coloquiales
+            "al tiro", "al rato", "lueguito", "ratito", "un cachito",
+            "altiro", "altoque", "yapo", "cachái", "bacán",
+            "en la once", "en la mañanita", "tempranito",
+            
+            # Días específicos (español e inglés)
             "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo",
             "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+            "mon", "tue", "wed", "thu", "fri", "sat", "sun",
             
-            # Meses
+            # Meses (español e inglés)
             "enero", "febrero", "marzo", "abril", "mayo", "junio",
             "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
             "january", "february", "march", "april", "may", "june",
             "july", "august", "september", "october", "november", "december",
+            "jan", "feb", "mar", "apr", "may", "jun",
+            "jul", "aug", "sep", "oct", "nov", "dec",
             
-            # Palabras académicas
-            "evaluación", "examen", "prueba", "control", "test", "quiz",
-            "entrega", "tarea", "trabajo", "informe", "proyecto", "ensayo",
-            "presentación", "exposición", "defensa", "seminario",
-            "fecha", "deadline", "vencimiento", "plazo",
+            # Palabras académicas y profesionales
+            "evaluación", "examen", "prueba", "control", "test", "quiz", "certamen",
+            "entrega", "tarea", "trabajo", "informe", "proyecto", "ensayo", "reporte",
+            "presentación", "exposición", "defensa", "seminario", "conferencia",
+            "reunión", "junta", "meeting", "call", "videoconferencia",
+            "fecha", "deadline", "vencimiento", "plazo", "límite", "cutoff",
+            "due date", "submission", "delivery", "handout",
             
-            # Expresiones de tiempo
-            "a las", "al mediodía", "en la mañana", "en la tarde", "en la noche",
-            "por la mañana", "por la tarde", "por la noche",
-            "am", "pm", "hrs", "horas", "minutos", "segundos",
+            # Expresiones de tiempo específicas
+            "a las", "al mediodía", "a medianoche", "al amanecer", "al atardecer",
+            "en la mañana", "en la tarde", "en la noche", "en la madrugada",
+            "por la mañana", "por la tarde", "por la noche", "por la madrugada",
+            "de mañana", "de tarde", "de noche", "de madrugada",
+            "am", "pm", "hrs", "horas", "minutos", "segundos", "mins", "segs",
+            "h", "min", "sec", "o'clock",
             
-            # Palabras de acción que sugieren recordatorios
-            "hacer", "ir", "llamar", "enviar", "comprar", "pagar", "revisar",
-            "estudiar", "practicar", "ejercitar", "leer", "escribir"
+            # Eventos y ocasiones
+            "cumpleaños", "cumple", "aniversario", "graduación", "boda", "matrimonio",
+            "fiesta", "celebración", "evento", "cita", "appointment", "date",
+            "viaje", "vacaciones", "feriado", "holiday", "trip", "travel",
+            
+            # Actividades cotidianas
+            "hacer", "ir", "venir", "llegar", "salir", "partir", "volver", "regresar",
+            "llamar", "telefonear", "contactar", "escribir", "enviar", "mandar",
+            "comprar", "pagar", "cobrar", "depositar", "transferir",
+            "estudiar", "leer", "practicar", "ejercitar", "entrenar", "gym",
+            "comer", "almorzar", "cenar", "desayunar", "tomar", "beber",
+            "limpiar", "ordenar", "arreglar", "reparar", "revisar", "chequear",
+            "trabajar", "terminar", "finalizar", "completar", "enviar",
+            
+            # Actividades médicas y personales
+            "médico", "doctor", "dentista", "cita médica", "consulta", "control",
+            "medicamento", "pastilla", "medicina", "tratamiento", "terapia",
+            "ejercicio", "deporte", "correr", "caminar", "nadar", "yoga",
+            "dieta", "régimen", "peso", "dormir", "despertar", "levantarse",
+            
+            # Expresiones de urgencia/importancia
+            "urgente", "importante", "crítico", "vital", "esencial", "necesario",
+            "imperdible", "fundamental", "clave", "priority", "asap", "ya",
+            "emergency", "emergencia", "crisis", "problema",
+            
+            # Frecuencia y repetición
+            "diario", "semanal", "mensual", "anual", "cada", "todos los",
+            "siempre", "nunca", "a veces", "ocasional", "regular",
+            "daily", "weekly", "monthly", "yearly", "every",
+            
+            # Expresiones vagas que podrían ser recordatorios
+            "no olvides", "no te olvides", "acuérdate", "recuerda",
+            "don't forget", "remember", "remind", "note", "memo",
+            "tengo que", "debo", "necesito", "hay que", "toca",
+            "i need to", "i have to", "i must", "should"
         ]
         
-        # Patrones de fecha numérica
+        # Patrones de fecha numérica (más completos)
         date_patterns = [
             r'\b\d{1,2}/\d{1,2}/\d{4}\b',          # DD/MM/YYYY
             r'\b\d{1,2}/\d{1,2}/\d{2}\b',          # DD/MM/YY
             r'\b\d{1,2}-\d{1,2}-\d{4}\b',          # DD-MM-YYYY
             r'\b\d{1,2}\.\d{1,2}\.\d{4}\b',        # DD.MM.YYYY
             r'\b\d{4}/\d{1,2}/\d{1,2}\b',          # YYYY/MM/DD
+            r'\b\d{4}-\d{1,2}-\d{1,2}\b',          # YYYY-MM-DD (ISO)
             r'\b\d{1,2}:\d{2}\b',                  # HH:MM
             r'\b\d{1,2}h\d{2}\b',                  # 14h30
             r'\b\d{1,2}:\d{2}(am|pm)\b',           # 2:30pm
+            r'\b\d{1,2}\s?(am|pm)\b',              # 3pm, 8 am
+            r'\b\d{1,2}hs?\b',                     # 15hs, 8h
+            r'\b\d{1,2}:\d{2}:\d{2}\b',            # HH:MM:SS
         ]
         
-        # Patrones académicos específicos
+        # Patrones académicos específicos (expandidos)
         academic_patterns = [
             r'fecha de entrega',
+            r'fecha limite',
+            r'fecha tope',
             r'entregar el',
+            r'entrega el',
             r'para el',
-            r'deadline',
-            r'vence el',
             r'hasta el',
+            r'deadline',
+            r'due date',
+            r'vence el',
+            r'vencimiento',
             r'antes del',
+            r'submission',
+            r'hand\s?in',
+            r'turn\s?in',
             r'\b\d+%\s+\w+',                      # 25% RA1-2-3
             r'ra\d+-\d+-\d+',                     # RA1-2-3
             r'evaluaci[óo]n\s+\w+',               # evaluación escrita
             r'examen\s+\w+',                      # examen final
+            r'prueba\s+\w+',                      # prueba parcial
+            r'control\s+\w+',                     # control de lectura
+            r'certamen\s+\w+',                    # certamen 1
+            r'tarea\s+\d+',                       # tarea 3
+            r'tp\s+\d+',                          # TP 2 (trabajo práctico)
+            r'lab\s+\d+',                         # lab 4 (laboratorio)
+            r'quiz\s+\d+',                        # quiz 1
         ]
         
-        # Patrones de tiempo relativo
+        # Patrones de tiempo relativo (muy expandidos)
         time_relative_patterns = [
+            # Tiempo específico
             r'en\s+\d+\s+(segundo|minuto|hora|día|semana|mes|año)s?',
             r'dentro\s+de\s+\d+',
             r'después\s+de\s+\d+',
             r'hace\s+\d+',
+            r'en\s+\d+h\d+',                      # en 2h30
+            r'en\s+\d+:\d+',                      # en 1:30
+            
+            # Expresiones relativas
             r'el\s+(próximo|siguiente|otro)',
             r'la\s+(próxima|siguiente|otra)',
             r'este\s+(lunes|martes|miércoles|jueves|viernes|sábado|domingo)',
             r'esta\s+(semana|tarde|mañana|noche)',
+            r'next\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)',
+            r'this\s+(week|afternoon|morning|evening)',
+            
+            # Expresiones chilenas
+            r'el\s+otro\s+(lunes|martes|miércoles|jueves|viernes)',
+            r'la\s+otra\s+semana',
+            r'pasado\s+mañana',
+            r'antes\s+de\s+ayer',
+            r'al\s+rato',
+            r'al\s+tiro',
+            r'lueguito',
+            
+            # Expresiones vagas pero útiles
+            r'pronto',
+            r'más\s+tarde',
+            r'después',
+            r'luego',
+            r'soon',
+            r'later',
+            r'eventually',
+            
+            # Rangos de tiempo
+            r'entre\s+las?\s+\d+',
+            r'desde\s+las?\s+\d+',
+            r'hasta\s+las?\s+\d+',
+            r'de\s+\d+\s+a\s+\d+',
+            r'from\s+\d+\s+to\s+\d+',
+            
+            # Frecuencia
+            r'cada\s+\d+\s+(minutos?|horas?|días?)',
+            r'todos?\s+los?\s+(lunes|martes|miércoles|jueves|viernes)',
+            r'every\s+\d+\s+(minutes?|hours?|days?)',
+        ]
+        
+        # Patrones de contexto de actividad (nuevo)
+        activity_patterns = [
+            # Trabajo/estudio
+            r'(trabajo|office|oficina|estudio|universidad|colegio)',
+            r'(meeting|reunión|junta|conferencia|videoconferencia)',
+            r'(proyecto|informe|reporte|presentación|tarea)',
+            
+            # Personal/salud
+            r'(médico|doctor|dentista|cita|consulta|control)',
+            r'(medicamento|pastilla|medicina|tratamiento)',
+            r'(ejercicio|gym|deporte|correr|caminar)',
+            
+            # Finanzas
+            r'(pagar|cobrar|banco|cuenta|tarjeta|transferencia)',
+            r'(factura|boleta|recibo|impuesto|dividendo)',
+            
+            # Social/familia
+            r'(cumpleaños|cumple|aniversario|fiesta|celebración)',
+            r'(llamar|contactar|escribir|visitar|ver)',
+            r'(mamá|papá|familia|amigo|novia|polola)',
+            
+            # Casa/compras
+            r'(comprar|super|supermercado|tienda|mall)',
+            r'(limpiar|ordenar|arreglar|reparar|mantener)',
+            r'(cocinar|comer|almorzar|cenar|desayunar)',
         ]
         
         text_lower = text.lower()
@@ -614,33 +743,60 @@ Soy tu asistente personal con IA para recordatorios y notas.
         # 4. Verificar patrones de tiempo relativo
         has_time_relative = any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in time_relative_patterns)
         
-        # 5. Verificar si tiene estructura de recordatorio (longitud mínima y contexto)
+        # 5. Verificar contexto de actividad
+        has_activity_context = any(re.search(pattern, text_lower, re.IGNORECASE) for pattern in activity_patterns)
+        
+        # 6. Verificar si tiene estructura de recordatorio (longitud mínima y contexto)
         has_context = len(text.split()) >= 2 and len(text) > 5
         
-        # 6. Detectar fechas numéricas con contexto
+        # 7. Detectar fechas numéricas con contexto de acción
         has_numeric_date = re.search(r'\b\d{1,2}/\d{1,2}/\d{2,4}\b', text)
-        has_action_context = any(word in text_lower for word in ["hacer", "ir", "llamar", "revisar", "estudiar", "pagar", "comprar"])
+        has_action_context = any(word in text_lower for word in [
+            "hacer", "ir", "venir", "llamar", "revisar", "estudiar", "pagar", 
+            "comprar", "trabajar", "terminar", "enviar", "completar", "ejercitar"
+        ])
+        
+        # 8. Detectar expresiones imperativas o de planificación
+        has_imperative = any(phrase in text_lower for phrase in [
+            "tengo que", "debo", "necesito", "hay que", "toca", "me toca",
+            "i need to", "i have to", "i must", "should", "gonna", "going to",
+            "voy a", "vamos a", "plan to", "planear", "planifico"
+        ])
+        
+        # 9. Detectar formato de lista o múltiples tareas
+        has_list_format = (
+            text.count('\n') > 1 or  # Múltiples líneas
+            text.count('-') > 1 or   # Lista con guiones
+            text.count('•') > 0 or   # Lista con bullets
+            text.count('*') > 1 or   # Lista con asteriscos
+            len(re.findall(r'\d+\.', text)) > 1  # Lista numerada
+        )
+        
+        # 10. Detectar preguntas sobre tiempo (potenciales recordatorios)
+        has_time_question = any(phrase in text_lower for phrase in [
+            "cuándo", "when", "qué hora", "what time", "a qué hora", "at what time"
+        ]) and len(text.split()) > 2
         
         # Es recordatorio si cumple cualquiera de estos criterios:
-        # - Tiene palabras clave específicas de recordatorio
-        # - Tiene patrones de fecha + contexto de acción
-        # - Tiene patrones académicos
-        # - Tiene tiempo relativo + contexto
-        # - Tiene fecha numérica + suficiente contexto
-        
         is_reminder = (
             has_reminder_keywords or
             (has_date_pattern and has_action_context) or
             has_academic_pattern or
             (has_time_relative and has_context) or
-            (has_numeric_date and len(text) > 15)
+            (has_numeric_date and len(text) > 15) or
+            (has_activity_context and (has_date_pattern or has_time_relative)) or
+            (has_imperative and (has_date_pattern or has_time_relative or len(text) > 20)) or
+            (has_list_format and (has_date_pattern or has_academic_pattern)) or
+            (has_time_question and has_activity_context)
         )
         
-        # Log para debugging
+        # Log para debugging (más detallado)
         if is_reminder:
-            logger.info(f"📝 Detectado como recordatorio: keywords={has_reminder_keywords}, "
-                       f"date={has_date_pattern}, academic={has_academic_pattern}, "
-                       f"relative={has_time_relative}, context={has_context}")
+            logger.info(f"📝 Detectado como recordatorio: "
+                       f"keywords={has_reminder_keywords}, date={has_date_pattern}, "
+                       f"academic={has_academic_pattern}, relative={has_time_relative}, "
+                       f"activity={has_activity_context}, imperative={has_imperative}, "
+                       f"list={has_list_format}, question={has_time_question}")
         
         return is_reminder
     
