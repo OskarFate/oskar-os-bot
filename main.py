@@ -12,6 +12,7 @@ from loguru import logger
 from config.settings import Settings
 from bot.telegram_interface import TelegramBot
 from bot.scheduler_service import SchedulerService
+from bot.calendar_integration import initialize_apple_calendar
 from database.connection import DatabaseManager
 from utils.logger import setup_logger
 from utils.health_server import HealthServer
@@ -33,6 +34,16 @@ async def main():
         db_manager = DatabaseManager(settings.MONGODB_CONNECTION_STRING, settings.MONGODB_DATABASE_NAME)
         await db_manager.connect()
         logger.info("🗄️ Conexión a MongoDB establecida")
+        
+        # Inicializar Apple Calendar
+        calendar_success = await initialize_apple_calendar(
+            settings.ICLOUD_EMAIL, 
+            settings.ICLOUD_PASSWORD
+        )
+        if calendar_success:
+            logger.info("🍎 Apple Calendar integrado correctamente")
+        else:
+            logger.warning("⚠️ Apple Calendar no disponible (continuando sin integración)")
         
         # Inicializar health server para DigitalOcean
         health_port = int(os.getenv('PORT', '8080'))  # DigitalOcean usa PORT env var

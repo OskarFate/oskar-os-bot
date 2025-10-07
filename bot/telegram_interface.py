@@ -57,6 +57,7 @@ class TelegramBot:
         self.dp.message.register(self._cmd_listar, Command("listar"))
         self.dp.message.register(self._cmd_buscar, Command("buscar"))
         self.dp.message.register(self._cmd_resumen, Command("resumen"))
+        self.dp.message.register(self._cmd_calendar, Command("calendar"))
         self.dp.message.register(self._cmd_status, Command("status"))
         self.dp.message.register(self._cmd_help, Command("help", "ayuda"))
         
@@ -83,13 +84,14 @@ class TelegramBot:
     async def _set_bot_commands(self):
         """Configurar comandos del bot para el menú"""
         commands = [
-            BotCommand(command="start", description="🚀 Iniciar el bot"),
+            BotCommand(command="start", description="🤖 Inicializar bot"),
             BotCommand(command="recordar", description="⏰ Crear recordatorio"),
             BotCommand(command="nota", description="📝 Guardar nota"),
             BotCommand(command="listar", description="📋 Ver recordatorios"),
             BotCommand(command="buscar", description="🔍 Buscar notas"),
             BotCommand(command="resumen", description="📊 Resumen semanal"),
-            BotCommand(command="status", description="ℹ️ Estado del bot"),
+            BotCommand(command="calendar", description="🍎 Estado Apple Calendar"),
+            BotCommand(command="status", description="⚙️ Estado del sistema"),
             BotCommand(command="help", description="❓ Ayuda"),
         ]
         
@@ -410,6 +412,74 @@ Simplemente escribe algo como:
             logger.error(f"❌ Error en comando resumen: {e}")
             await message.answer("❌ Error generando resumen. Intenta de nuevo.")
     
+    async def _cmd_calendar(self, message: Message):
+        """Comando /calendar - Estado de Apple Calendar"""
+        try:
+            await self._register_user(message.from_user)
+            
+            # Importar aquí para evitar ciclos
+            from bot.calendar_integration import apple_calendar
+            
+            if not apple_calendar:
+                await message.answer(
+                    "❌ **Apple Calendar no configurado**\n\n"
+                    "La integración con Apple Calendar no está disponible.\n"
+                    "Los recordatorios se crean solo en el bot.",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Probar conexión
+            processing_msg = await message.answer("🔄 Verificando conexión con Apple Calendar...")
+            
+            try:
+                calendar_info = await apple_calendar.test_connection()
+                
+                if calendar_info.get("success", False):
+                    status_text = f"""🍎 **Apple Calendar - Estado**
+
+✅ **Conectado exitosamente**
+
+📧 **Email:** {calendar_info.get('email', 'N/A')}
+📅 **Calendario:** {calendar_info.get('calendar_name', 'N/A')}
+🌐 **Servidor:** {calendar_info.get('server', 'N/A')}
+📊 **Eventos:** {calendar_info.get('events_count', 'N/A')}
+
+🎯 **Funcionalidad:**
+• Los recordatorios se crean automáticamente en tu calendario
+• Duración inteligente según el tipo de evento
+• Sincronización con todos tus dispositivos Apple
+
+💡 **Próximo recordatorio se sincronizará automáticamente**"""
+                else:
+                    error_msg = calendar_info.get('error', 'Error desconocido')
+                    status_text = f"""❌ **Error en Apple Calendar**
+
+🔴 **No conectado**
+
+⚠️ **Error:** {error_msg}
+
+💡 **Posibles soluciones:**
+• Verificar credenciales de iCloud
+• Comprobar contraseña de aplicación
+• Revisar conexión a internet
+
+📝 **Los recordatorios se siguen creando en el bot**"""
+                
+                await processing_msg.edit_text(status_text, parse_mode="Markdown")
+                
+            except Exception as e:
+                await processing_msg.edit_text(
+                    f"❌ **Error verificando Apple Calendar**\n\n"
+                    f"Error: {str(e)}\n\n"
+                    f"Los recordatorios funcionan normalmente en el bot.",
+                    parse_mode="Markdown"
+                )
+                
+        except Exception as e:
+            logger.error(f"❌ Error en comando calendar: {e}")
+            await message.answer("❌ Error verificando estado del calendario.")
+
     async def _cmd_status(self, message: Message):
         """Comando /status - Estado del sistema"""
         try:
@@ -467,7 +537,13 @@ Soy tu asistente personal con IA para recordatorios y notas.
 • "backup cada mes"
 • "llamar mamá todos los domingos"
 
-📝 **Notas:**
+� **Apple Calendar (¡INTEGRADO!):**
+• Los recordatorios se crean automáticamente en tu calendario
+• Sincronización con iPhone, iPad, Mac
+• `/calendar` - Ver estado de la integración
+• Duración inteligente según el tipo de evento
+
+�📝 **Notas:**
 • `/nota Idea: crear app productividad`
 • `/buscar trabajo` - Buscar notas
 • Clasificación automática por IA
@@ -483,6 +559,7 @@ Soy tu asistente personal con IA para recordatorios y notas.
 • Pre-recordatorios (7d, 2d, 1d)
 • Búsqueda semántica inteligente
 • Aprendo tus patrones y preferencias
+• Integración completa con Apple Calendar
 
 🇨🇱 **Lenguaje chileno:**
 • "al tiro comprar pan"
@@ -492,9 +569,10 @@ Soy tu asistente personal con IA para recordatorios y notas.
 💡 **Ejemplos prácticos:**
 1. "Recuérdame ir al gym en 2 horas"
 2. "pastillas todos los días 8am"
-3. "/nota Reflexión: el proyecto va bien"
-4. "/buscar ideas de vacaciones"
-5. "/resumen" para ver tu semana
+3. "examen el 5 de noviembre" → ¡Se crea en tu calendario!
+4. "/nota Reflexión: el proyecto va bien"
+5. "/buscar ideas de vacaciones"
+6. "/resumen" para ver tu semana
 
 ¿Necesitas algo específico? ¡Solo pregúntame! 😊"""
 

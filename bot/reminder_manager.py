@@ -10,6 +10,7 @@ from database.connection import DatabaseManager
 from database.models import Reminder, ReminderStatus
 from config.settings import settings
 from utils.helpers import clean_reminder_text
+from bot.calendar_integration import create_calendar_event
 
 
 class ReminderManager:
@@ -95,6 +96,26 @@ class ReminderManager:
             if success:
                 logger.info(f"✅ Recordatorio creado para usuario {user_id}: '{clean_text}' en {target_date}")
                 logger.info(f"⏰ {len(pre_reminders)} pre-recordatorios programados")
+                
+                # Crear evento en Apple Calendar
+                try:
+                    calendar_data = {
+                        "text": clean_text,
+                        "date": target_date,
+                        "original_input": original_input,
+                        "user_id": user_id
+                    }
+                    
+                    calendar_success = await create_calendar_event(calendar_data)
+                    if calendar_success:
+                        logger.info(f"📅 Evento creado en Apple Calendar: {clean_text}")
+                    else:
+                        logger.warning(f"⚠️ No se pudo crear evento en Apple Calendar")
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ Error integrando con Apple Calendar: {e}")
+                    # No fallar la creación del recordatorio si falla el calendario
+                
                 return True
             else:
                 logger.error(f"❌ Error guardando recordatorio en BD")

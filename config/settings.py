@@ -23,8 +23,13 @@ class Settings:
         self.LLAMA_MODEL: str = "meta-llama/llama-3.3-70b-instruct:free"
         
         # MongoDB Atlas
-        self.MONGODB_CONNECTION_STRING: str = os.getenv("MONGODB_CONNECTION_STRING", "")
-        self.MONGODB_DATABASE_NAME: str = os.getenv("MONGODB_DATABASE_NAME", "oskaros_bot")
+        self.MONGODB_URI: str = os.getenv("MONGODB_URI", "")
+        self.MONGODB_DB_NAME: str = os.getenv("MONGODB_DB_NAME", "oskar_os_db")
+        
+        # Apple Calendar (iCloud CalDAV)
+        self.ICLOUD_EMAIL: str = os.getenv("ICLOUD_EMAIL", "")
+        self.ICLOUD_PASSWORD: str = os.getenv("ICLOUD_PASSWORD", "")
+        self.ICLOUD_CALENDAR_URL: str = "https://caldav.icloud.com"
         
         # Scheduler
         self.SCHEDULER_INTERVAL_SECONDS: int = 60  # Revisar cada 60 segundos
