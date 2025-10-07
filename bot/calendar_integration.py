@@ -6,7 +6,7 @@ Permite crear eventos automáticamente en el calendario del usuario
 import caldav
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
-from icalendar import Calendar, Event, vDDT
+from icalendar import Calendar, Event
 import pytz
 from loguru import logger
 
