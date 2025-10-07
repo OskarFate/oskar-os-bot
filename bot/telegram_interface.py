@@ -60,6 +60,7 @@ class TelegramBot:
         self.dp.message.register(self._cmd_calendar, Command("calendar"))
         self.dp.message.register(self._cmd_status, Command("status"))
         self.dp.message.register(self._cmd_help, Command("help", "ayuda"))
+        self.dp.message.register(self._cmd_eliminar, Command("eliminar", "borrar", "cancelar"))
         
         # Mensajes de texto general
         self.dp.message.register(self._handle_text_message)
@@ -573,6 +574,13 @@ Soy tu asistente personal con IA para recordatorios y notas.
 4. "/nota Reflexión: el proyecto va bien"
 5. "/buscar ideas de vacaciones"
 6. "/resumen" para ver tu semana
+7. "/eliminar gym" → Elimina recordatorios del gym
+8. "cancela la pastilla de mañana" → Elimina recordatorio específico
+
+🗑️ **Eliminar recordatorios:**
+• `/eliminar <descripción>` - Comando directo
+• "elimina/borra/cancela recordatorio X" - Lenguaje natural
+• "gym todos los días excepto viernes" - Modifica recurrencias
 
 ¿Necesitas algo específico? ¡Solo pregúntame! 😊"""
 
@@ -581,6 +589,39 @@ Soy tu asistente personal con IA para recordatorios y notas.
         except Exception as e:
             logger.error(f"❌ Error en comando help: {e}")
             await message.answer("❌ Error mostrando ayuda.")
+    
+    async def _cmd_eliminar(self, message: Message):
+        """Comando /eliminar - Eliminar recordatorios"""
+        try:
+            await self._register_user(message.from_user)
+            
+            # Extraer texto del comando
+            command_text = message.text
+            if not command_text or len(command_text.split()) < 2:
+                await message.answer(
+                    "🗑️ **Eliminar recordatorios**\n\n"
+                    "Uso: `/eliminar <descripción>`\n\n"
+                    "Ejemplos:\n"
+                    "• `/eliminar gym`\n"
+                    "• `/eliminar pastillas`\n"
+                    "• `/eliminar reunión mañana`\n"
+                    "• `/eliminar todos los recordatorios de ejercicio`\n\n"
+                    "También puedes usar lenguaje natural:\n"
+                    "• \"elimina el recordatorio del gym\"\n"
+                    "• \"cancela las pastillas de hoy\"\n"
+                    "• \"borra todos los recordatorios del médico\"",
+                    parse_mode="Markdown"
+                )
+                return
+            
+            # Remover comando y obtener contenido
+            deletion_input = command_text[10:].strip()  # Remover "/eliminar "
+            
+            await self._process_reminder_request(message, f"eliminar {deletion_input}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error en comando eliminar: {e}")
+            await message.answer("❌ Error procesando eliminación. Intenta de nuevo.")
     
     # --- MANEJO DE MENSAJES ---
     
@@ -915,6 +956,14 @@ Soy tu asistente personal con IA para recordatorios y notas.
             r'cada\s+\d+hrs?',  # cada 12hrs
         ])
         
+        # 13. NUEVO: Detectar solicitudes de eliminación
+        has_deletion_request = any(phrase in text_lower for phrase in [
+            "elimina", "eliminar", "borra", "borrar", "cancela", "cancelar",
+            "quita", "quitar", "delete", "remove", "cancel",
+            "no quiero", "ya no", "excepto", "menos", "except", "but not",
+            "salvo", "a excepción de", "excluding", "sin incluir"
+        ])
+        
         # Es recordatorio si cumple cualquiera de estos criterios:
         is_reminder = (
             has_reminder_keywords or
@@ -927,7 +976,8 @@ Soy tu asistente personal con IA para recordatorios y notas.
             (has_list_format and (has_date_pattern or has_academic_pattern)) or
             (has_time_question and has_activity_context) or
             has_recurring_pattern or  # NUEVO: Patrones recurrentes
-            (has_numeric_frequency and has_activity_context)  # NUEVO: Frecuencia numérica con contexto
+            (has_numeric_frequency and has_activity_context) or  # NUEVO: Frecuencia numérica con contexto
+            has_deletion_request  # NUEVO: Solicitudes de eliminación
         )
         
         # Log para debugging (más detallado)
@@ -937,9 +987,35 @@ Soy tu asistente personal con IA para recordatorios y notas.
                        f"academic={has_academic_pattern}, relative={has_time_relative}, "
                        f"activity={has_activity_context}, imperative={has_imperative}, "
                        f"list={has_list_format}, question={has_time_question}, "
-                       f"recurring={has_recurring_pattern}, frequency={has_numeric_frequency}")
+                       f"recurring={has_recurring_pattern}, frequency={has_numeric_frequency}, "
+                       f"deletion={has_deletion_request}")
         
         return is_reminder
+    
+    def _has_deletion_pattern(self, text: str) -> bool:
+        """Detectar si el texto contiene patrones de eliminación"""
+        text_lower = text.lower()
+        
+        # Patrones explícitos de eliminación
+        deletion_keywords = [
+            'eliminar', 'elimina', 'borra', 'borrar', 'cancelar', 'cancela',
+            'quitar', 'quita', 'remover', 'remueve', 'delete', 'remove',
+            'deshacer', 'anular', 'deshaz'
+        ]
+        
+        # Patrones de modificación con excepciones
+        exception_patterns = [
+            'excepto', 'menos', 'except', 'salvo', 'pero no', 'all except',
+            'todos excepto', 'todas excepto', 'todo excepto', 'toda excepta'
+        ]
+        
+        # Verificar palabras clave de eliminación
+        has_deletion_keyword = any(keyword in text_lower for keyword in deletion_keywords)
+        
+        # Verificar patrones de excepción (para modificar recurrencias)
+        has_exception_pattern = any(pattern in text_lower for pattern in exception_patterns)
+        
+        return has_deletion_keyword or has_exception_pattern
     
     async def _process_reminder_request(self, message: Message, reminder_input: str):
         """Procesar solicitud de recordatorio - Sistema inteligente con recurrencia"""
@@ -947,7 +1023,78 @@ Soy tu asistente personal con IA para recordatorios y notas.
             # Mostrar mensaje de procesamiento
             processing_msg = await message.answer("🤖 Interpretando con IA...")
             
-            # PRIMERO: Verificar si es un recordatorio recurrente
+            # PRIMERO: Verificar si es una solicitud de eliminación
+            if self._has_deletion_pattern(reminder_input):
+                try:
+                    logger.info(f"🗑️ Procesando solicitud de eliminación: {reminder_input}")
+                    
+                    # Parsear la solicitud de eliminación con AI
+                    deletion_data = await self.ai_interpreter.parse_deletion_request(reminder_input)
+                    
+                    if deletion_data["type"] == "specific":
+                        # Eliminar recordatorio específico
+                        success = await self.reminder_manager.delete_reminder(
+                            text=deletion_data["target"],
+                            user_id=message.from_user.id,
+                            date=deletion_data.get("date")
+                        )
+                        
+                        if success:
+                            await processing_msg.edit_text("✅ Recordatorio eliminado exitosamente")
+                        else:
+                            await processing_msg.edit_text("❌ No se encontró el recordatorio especificado")
+                    
+                    elif deletion_data["type"] == "pattern":
+                        # Eliminar múltiples recordatorios por patrón
+                        count = await self.reminder_manager.delete_reminders_by_pattern(
+                            pattern=deletion_data["pattern"],
+                            user_id=message.from_user.id
+                        )
+                        
+                        if count > 0:
+                            await processing_msg.edit_text(f"✅ Se eliminaron {count} recordatorio(s)")
+                        else:
+                            await processing_msg.edit_text("❌ No se encontraron recordatorios que coincidan")
+                    
+                    elif deletion_data["type"] == "exception":
+                        # Modificar recordatorio recurrente con excepciones
+                        success = await self.reminder_manager.delete_reminder_exceptions(
+                            text=deletion_data["target"],
+                            user_id=message.from_user.id,
+                            exception_dates=deletion_data.get("exception_dates"),
+                            exception_weekdays=deletion_data.get("exception_weekdays")
+                        )
+                        
+                        if success:
+                            weekdays_str = ", ".join(deletion_data.get("exception_weekdays", []))
+                            if weekdays_str:
+                                await processing_msg.edit_text(f"✅ Recordatorio modificado - no se ejecutará los {weekdays_str}")
+                            else:
+                                await processing_msg.edit_text("✅ Recordatorio modificado con excepciones")
+                        else:
+                            await processing_msg.edit_text("❌ No se pudo modificar el recordatorio")
+                    
+                    elif deletion_data["type"] == "modification":
+                        # Modificar recordatorio existente
+                        success = await self.reminder_manager.modify_reminder(
+                            old_text=deletion_data["old_target"],
+                            new_text=deletion_data["new_target"],
+                            user_id=message.from_user.id
+                        )
+                        
+                        if success:
+                            await processing_msg.edit_text("✅ Recordatorio modificado exitosamente")
+                        else:
+                            await processing_msg.edit_text("❌ No se pudo modificar el recordatorio")
+                    
+                    return
+                    
+                except Exception as e:
+                    logger.error(f"Error procesando eliminación: {e}")
+                    await processing_msg.edit_text("❌ Error procesando la solicitud de eliminación")
+                    return
+            
+            # SEGUNDO: Verificar si es un recordatorio recurrente
             recurring_reminders = await self.ai_interpreter.parse_recurring_reminder(reminder_input)
             
             if recurring_reminders:

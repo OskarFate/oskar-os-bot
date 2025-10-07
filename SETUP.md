@@ -34,7 +34,7 @@ nano .env
 TELEGRAM_BOT_TOKEN=1234567890:ABCDEF1234567890abcdef1234567890ABC
 
 # Get from https://openrouter.ai/
-OPENROUTER_API_KEY=sk-or-v1-1234567890abcdef1234567890abcdef1234567890abcdef12
+OPENROUTER_API_KEY=sk-or-v1-[TU_CLAVE_REAL_AQUI]
 
 # Get from MongoDB Atlas
 MONGODB_CONNECTION_STRING=mongodb+srv://username:password@cluster0.abc123.mongodb.net/

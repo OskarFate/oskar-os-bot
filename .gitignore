@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyc
 *$py.class
 *.so
 .Python
@@ -21,14 +22,36 @@ wheels/
 *.egg
 MANIFEST
 
-# Environment
+# Environment & Secrets (CRÍTICO - NO SUBIR)
 .env
+.env.local
+.env.production
+.env.staging
+.env.development
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+.python-version
+
+# API Keys & Credentials (CRÍTICO - NO SUBIR)
+*.key
+*.pem
+*.p12
+*.pfx
+credentials.json
+service-account.json
+config.json
+secrets.yaml
+secrets.yml
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+database.json
 
 # IDE
 .vscode/
@@ -36,10 +59,16 @@ venv.bak/
 *.swp
 *.swo
 *~
+.project
+.pydevproject
 
 # Logs
 logs/
 *.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # OS
 .DS_Store
@@ -49,15 +78,45 @@ logs/
 .Trashes
 ehthumbs.db
 Thumbs.db
-
-# Project specific
-test_setup.py
-*.db
-*.sqlite
-*.sqlite3
+desktop.ini
 
 # Temporary files
 tmp/
 temp/
 *.tmp
 *.temp
+.cache/
+.pytest_cache/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# Testing
+.tox/
+.nox/
+test_results/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Documentation builds
+docs/_build/
+
+# Deployment & Build artifacts
+*.tar.gz
+*.zip
+dist-newstyle/
+.stack-work/
+node_modules/
+
+# GitGuardian & Security
+.secrets
+.private
+private/
+secrets/

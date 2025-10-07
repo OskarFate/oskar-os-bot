@@ -196,6 +196,84 @@ class DatabaseManager:
             logger.error(f"❌ Error obteniendo recordatorios pendientes: {e}")
             return []
     
+    async def get_reminder_by_id(self, reminder_id: str, user_id: int) -> Optional[Dict[str, Any]]:
+        """Obtener recordatorio por ID"""
+        try:
+            from bson import ObjectId
+            reminder = await self.reminders.find_one({
+                "_id": ObjectId(reminder_id),
+                "user_id": user_id
+            })
+            return reminder
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo recordatorio por ID: {e}")
+            return None
+    
+    async def delete_reminder(self, reminder_id: str, user_id: int) -> bool:
+        """Eliminar recordatorio específico"""
+        try:
+            from bson import ObjectId
+            result = await self.reminders.delete_one({
+                "_id": ObjectId(reminder_id),
+                "user_id": user_id
+            })
+            return result.deleted_count > 0
+        except Exception as e:
+            logger.error(f"❌ Error eliminando recordatorio: {e}")
+            return False
+    
+    async def search_reminders_by_text(self, user_id: int, text_pattern: str) -> List[Dict[str, Any]]:
+        """Buscar recordatorios por patrón de texto"""
+        try:
+            query = {
+                "user_id": user_id,
+                "status": ReminderStatus.PENDING,
+                "$or": [
+                    {"text": {"$regex": text_pattern, "$options": "i"}},
+                    {"original_input": {"$regex": text_pattern, "$options": "i"}}
+                ]
+            }
+            
+            reminders = []
+            cursor = self.reminders.find(query)
+            async for reminder in cursor:
+                reminders.append(reminder)
+            
+            return reminders
+        except Exception as e:
+            logger.error(f"❌ Error buscando recordatorios por texto: {e}")
+            return []
+    
+    async def get_reminders_by_date_and_pattern(self, user_id: int, target_date: datetime, text_pattern: str) -> List[Dict[str, Any]]:
+        """Obtener recordatorios en fecha específica que coincidan con patrón"""
+        try:
+            # Buscar en un rango de ±12 horas para la fecha objetivo
+            start_date = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+            
+            query = {
+                "user_id": user_id,
+                "status": ReminderStatus.PENDING,
+                "date": {
+                    "$gte": start_date,
+                    "$lte": end_date
+                },
+                "$or": [
+                    {"text": {"$regex": text_pattern, "$options": "i"}},
+                    {"original_input": {"$regex": text_pattern, "$options": "i"}}
+                ]
+            }
+            
+            reminders = []
+            cursor = self.reminders.find(query)
+            async for reminder in cursor:
+                reminders.append(reminder)
+            
+            return reminders
+        except Exception as e:
+            logger.error(f"❌ Error obteniendo recordatorios por fecha y patrón: {e}")
+            return []
+    
     async def mark_as_notified(self, reminder_id: str, is_pre_reminder: bool = False, pre_reminder_time: Optional[datetime] = None) -> bool:
         """Marcar recordatorio como notificado"""
         try:
@@ -339,3 +417,36 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"❌ Error eliminando notas: {e}")
             return 0
+    
+    async def update_reminder_text(self, reminder_id: str, new_text: str) -> bool:
+        """
+        Actualizar el texto de un recordatorio
+        
+        Args:
+            reminder_id: ID del recordatorio
+            new_text: Nuevo texto para el recordatorio
+            
+        Returns:
+            bool: True si se actualizó exitosamente
+        """
+        try:
+            result = await self.reminders.update_one(
+                {"_id": ObjectId(reminder_id)},
+                {
+                    "$set": {
+                        "text": new_text,
+                        "updated_at": datetime.utcnow()
+                    }
+                }
+            )
+            
+            if result.modified_count > 0:
+                logger.info(f"✅ Texto de recordatorio actualizado: {reminder_id}")
+                return True
+            else:
+                logger.warning(f"⚠️ No se encontró recordatorio para actualizar: {reminder_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error actualizando texto de recordatorio: {e}")
+            return False

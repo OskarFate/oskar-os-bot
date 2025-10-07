@@ -73,6 +73,8 @@ class Reminder(BaseModel):
     text: str = Field(..., description="Texto del recordatorio")
     original_input: str = Field(..., description="Input original del usuario")
     date: datetime = Field(..., description="Fecha y hora del recordatorio")
+    recurring: bool = Field(default=False, description="Si es un recordatorio recurrente")
+    frequency: Optional[str] = Field(None, description="Frecuencia de recurrencia (daily, weekly, monthly)")
     pre_reminders: List[datetime] = Field(default_factory=list, description="Recordatorios previos")
     status: ReminderStatus = Field(default=ReminderStatus.PENDING)
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -98,6 +100,23 @@ class Note(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = Field(None)
     
+    model_config = {
+        "populate_by_name": True,
+        "arbitrary_types_allowed": True,
+        "json_encoders": {ObjectId: str}
+    }
+
+
+class UserMemory(BaseModel):
+    """Modelo para la memoria contextual del usuario"""
+    id: PyObjectId = Field(default_factory=ObjectId, alias="_id")
+    user_id: int = Field(..., description="ID del usuario")
+    habits: Dict[str, Any] = Field(default_factory=dict)
+    preferences: Dict[str, Any] = Field(default_factory=dict)
+    context_history: List[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
     model_config = {
         "populate_by_name": True,
         "arbitrary_types_allowed": True,

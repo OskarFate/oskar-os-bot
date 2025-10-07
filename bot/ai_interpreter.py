@@ -524,6 +524,165 @@ Salida: [{{"text": "Presentación", "date": "2025-11-10T09:00:00Z"}}]"""
             logger.error(f"❌ Error parseando múltiples recordatorios: {e}")
             return []
     
+    async def parse_reminder_request(self, message_text: str, user_id: int) -> Dict[str, Any]:
+        """
+        Método alias para parse_deletion_request para compatibilidad
+        """
+        return await self.parse_deletion_request(message_text)
+    
+    async def parse_deletion_request(self, user_input: str) -> Dict[str, Any]:
+        """
+        Interpretar solicitudes de eliminación de recordatorios con inteligencia de días de la semana
+        
+        Args:
+            user_input: Input del usuario con solicitud de eliminación
+        
+        Returns:
+            Diccionario con información de la eliminación
+        """
+        # Obtener fecha y día actual
+        current_time = datetime.now(pytz.timezone('America/Santiago'))
+        weekdays_es = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']
+        current_weekday = weekdays_es[current_time.weekday()]
+        
+        # Prompt mejorado para manejar días de la semana
+        system_prompt = f"""Eres un experto en interpretar solicitudes de eliminación y modificación de recordatorios.
+
+FECHA/HORA ACTUAL: {current_time.strftime('%Y-%m-%d %H:%M:%S')} (Chile)
+DÍA DE LA SEMANA ACTUAL: {current_weekday}
+
+TIPOS DE ELIMINACIÓN QUE DEBES DETECTAR:
+
+1. ELIMINACIÓN ESPECÍFICA:
+   - "elimina el recordatorio del gym"
+   - "borra la cita del médico"
+   - "cancela el examen de matemáticas"
+
+2. ELIMINACIÓN POR PATRÓN:
+   - "elimina todos los recordatorios de ejercicio"
+   - "borra todas las citas médicas"
+
+3. MODIFICACIÓN CON EXCEPCIONES DE DÍAS (¡IMPORTANTE!):
+   - "mantén todos los días el gym y elimina el viernes" → gym diario excepto viernes
+   - "gym todos los días excepto el viernes" → mismo resultado
+   - "medicamento todos los días menos el domingo" → medicamento diario excepto domingo
+   - "ejercitar diario pero no el martes que viene" → ejercicio diario excepto próximo martes
+
+4. LÓGICA DE DÍAS DE LA SEMANA:
+   - Si menciona "viernes" y hoy es viernes → usar próximo viernes
+   - Si menciona "lunes" y hoy es martes → usar próximo lunes
+   - Siempre calcular el próximo día si ya pasó en la semana actual
+
+FORMATO DE RESPUESTA - SIEMPRE JSON válido:
+{{
+    "is_deletion": true,
+    "deletion_type": "specific|pattern|exception|modification",
+    "target_pattern": "texto a buscar",
+    "exceptions": [
+        {{"weekday": "día", "reason": "motivo"}}
+    ],
+    "keep_recurrence": true,
+    "action_description": "descripción clara"
+}}
+
+Para NO eliminación:
+{{"is_deletion": false}}
+
+EJEMPLOS:
+"mantén todos los días el gym y elimina el viernes"
+→ {{"is_deletion": true, "deletion_type": "exception", "target_pattern": "gym", "keep_recurrence": true, "exceptions": [{{"weekday": "viernes", "reason": "excepción todos los viernes"}}], "action_description": "Mantener gym diario excepto viernes"}}
+
+"gym todos los días menos el domingo"
+→ {{"is_deletion": true, "deletion_type": "exception", "target_pattern": "gym", "keep_recurrence": true, "exceptions": [{{"weekday": "domingo", "reason": "excepción todos los domingos"}}], "action_description": "Gym diario excepto domingos"}}
+
+"elimina el recordatorio del gym"
+→ {{"is_deletion": true, "deletion_type": "specific", "target_pattern": "gym", "keep_recurrence": false, "action_description": "Eliminar recordatorio específico de gym"}}
+
+¡SÉ MUY INTELIGENTE CON LOS DÍAS DE LA SEMANA!"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Analizar eliminación: '{user_input}'"}
+        ]
+        
+        try:
+            result = await self._make_api_call(messages, temperature=0.2)
+            
+            if not result:
+                return {"is_deletion": False}
+            
+            # Limpiar respuesta para obtener solo el JSON
+            result = result.strip()
+            if result.startswith('```json'):
+                result = result[7:-3].strip()
+            elif result.startswith('```'):
+                result = result[3:-3].strip()
+            
+            try:
+                parsed_result = json.loads(result)
+                
+                # Si es una modificación con excepciones, procesar los días de la semana
+                if parsed_result.get("is_deletion") and parsed_result.get("deletion_type") == "exception":
+                    exceptions = parsed_result.get("exceptions", [])
+                    for exception in exceptions:
+                        if "weekday" in exception:
+                            # Calcular la fecha del próximo día especificado
+                            weekday_name = exception["weekday"].lower()
+                            weekday_index = self._get_weekday_index(weekday_name)
+                            if weekday_index is not None:
+                                next_date = self._get_next_weekday_date(current_time, weekday_index)
+                                exception["date"] = next_date.isoformat() + "Z"
+                
+                # Convertir a formato legacy para compatibilidad
+                if parsed_result.get("is_deletion"):
+                    legacy_result = {
+                        "type": parsed_result.get("deletion_type", "specific"),
+                        "target": parsed_result.get("target_pattern", ""),
+                        "pattern": parsed_result.get("target_pattern", ""),
+                        "keep_recurrence": parsed_result.get("keep_recurrence", False),
+                        "exception_dates": [exc.get("date") for exc in parsed_result.get("exceptions", []) if "date" in exc],
+                        "exception_weekdays": [exc.get("weekday") for exc in parsed_result.get("exceptions", []) if "weekday" in exc],
+                        "action_description": parsed_result.get("action_description", "")
+                    }
+                    
+                    logger.info(f"🗑️ Solicitud de eliminación parseada: {legacy_result['type']} - {legacy_result['action_description']}")
+                    return legacy_result
+                else:
+                    return {"is_deletion": False}
+                    
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ Error parseando JSON de eliminación: {e}")
+                logger.error(f"Respuesta recibida: {result}")
+                return {"is_deletion": False}
+                
+        except Exception as e:
+            logger.error(f"❌ Error en parse_deletion_request: {e}")
+            return {"is_deletion": False}
+    
+    def _get_weekday_index(self, weekday_name: str) -> Optional[int]:
+        """Obtener índice del día de la semana (0=lunes, 6=domingo)"""
+        weekdays_map = {
+            'lunes': 0, 'martes': 1, 'miércoles': 2, 'miercoles': 2,
+            'jueves': 3, 'viernes': 4, 'sábado': 5, 'sabado': 5, 'domingo': 6
+        }
+        return weekdays_map.get(weekday_name.lower())
+    
+    def _get_next_weekday_date(self, current_date: datetime, target_weekday: int) -> datetime:
+        """
+        Calcular la fecha del próximo día de la semana especificado
+        
+        Args:
+            current_date: Fecha actual
+            target_weekday: Día objetivo (0=lunes, 6=domingo)
+            
+        Returns:
+            datetime del próximo día especificado
+        """
+        days_ahead = target_weekday - current_date.weekday()
+        if days_ahead <= 0:  # Si ya pasó o es hoy, tomar la próxima semana
+            days_ahead += 7
+        return current_date + timedelta(days=days_ahead)
+
     async def enhance_reminder_text(self, user_input: str, context: Optional[List[str]] = None) -> str:
         """
         Mejorar texto de recordatorio con contexto
@@ -729,3 +888,129 @@ Formato: 3,7,1,9,2"""
                 if query_lower in note.get('text', '').lower()
             ]
             return simple_results[:5]
+
+    async def classify_note(self, note_content: str) -> Dict[str, Any]:
+        """
+        Clasificar una nota según su contenido
+        """
+        try:
+            # Clasificación básica por palabras clave
+            content_lower = note_content.lower()
+            
+            # Determinar categoría
+            if any(word in content_lower for word in ['idea', 'proyecto', 'innovar', 'crear']):
+                category = 'idea'
+            elif any(word in content_lower for word in ['reunión', 'meeting', 'call', 'cita']):
+                category = 'meeting'
+            elif any(word in content_lower for word in ['tarea', 'hacer', 'pendiente', 'task']):
+                category = 'task'
+            elif any(word in content_lower for word in ['reflexión', 'aprender', 'insight']):
+                category = 'reflection'
+            else:
+                category = 'general'
+            
+            # Determinar prioridad
+            if any(word in content_lower for word in ['urgente', 'importante', 'critical', 'asap']):
+                priority = 'high'
+            elif any(word in content_lower for word in ['normal', 'regular', 'medium']):
+                priority = 'medium'
+            else:
+                priority = 'low'
+            
+            # Determinar sentimiento
+            positive_words = ['bien', 'genial', 'excelente', 'bueno', 'feliz', 'éxito']
+            negative_words = ['mal', 'problema', 'error', 'difícil', 'preocupa', 'fallo']
+            
+            positive_count = sum(1 for word in positive_words if word in content_lower)
+            negative_count = sum(1 for word in negative_words if word in content_lower)
+            
+            if positive_count > negative_count:
+                sentiment = 'positive'
+            elif negative_count > positive_count:
+                sentiment = 'negative'
+            else:
+                sentiment = 'neutral'
+            
+            # Extraer tags automáticos
+            tags = []
+            if 'trabajo' in content_lower or 'work' in content_lower:
+                tags.append('work')
+            if 'personal' in content_lower:
+                tags.append('personal')
+            if 'familia' in content_lower or 'family' in content_lower:
+                tags.append('family')
+            if 'salud' in content_lower or 'health' in content_lower:
+                tags.append('health')
+            
+            return {
+                'category': category,
+                'priority': priority,
+                'sentiment': sentiment,
+                'tags': tags,
+                'confidence': 0.8
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error en classify_note: {e}")
+            return {
+                'category': 'general',
+                'priority': 'low',
+                'sentiment': 'neutral',
+                'tags': [],
+                'confidence': 0.5
+            }
+
+    async def extract_datetime_info(self, text: str) -> Dict[str, Any]:
+        """
+        Extraer información de fecha y hora de un texto
+        """
+        try:
+            from utils.helpers import parse_natural_date
+            
+            # Intentar parsear fecha
+            parsed_date = parse_natural_date(text)
+            
+            # Detectar si es recurrente
+            recurring_patterns = [
+                'todos los días', 'cada día', 'diariamente',
+                'todas las semanas', 'cada semana', 'semanalmente',
+                'todos los lunes', 'cada lunes',
+                'todos los martes', 'cada martes',
+                'todos los miércoles', 'cada miércoles',
+                'todos los jueves', 'cada jueves',
+                'todos los viernes', 'cada viernes',
+                'todos los sábados', 'cada sábado',
+                'todos los domingos', 'cada domingo'
+            ]
+            
+            is_recurring = any(pattern in text.lower() for pattern in recurring_patterns)
+            
+            # Detectar frecuencia
+            frequency = None
+            if is_recurring:
+                if any(day in text.lower() for day in ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo']):
+                    frequency = 'weekly'
+                elif 'día' in text.lower():
+                    frequency = 'daily'
+                elif 'semana' in text.lower():
+                    frequency = 'weekly'
+                elif 'mes' in text.lower():
+                    frequency = 'monthly'
+                else:
+                    frequency = 'daily'
+            
+            return {
+                'date': parsed_date,
+                'is_recurring': is_recurring,
+                'frequency': frequency,
+                'confidence': 0.8 if parsed_date else 0.3
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error en extract_datetime_info: {e}")
+            return {
+                'date': None,
+                'is_recurring': False,
+                'frequency': None,
+                'confidence': 0.0
+            }

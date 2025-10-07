@@ -18,7 +18,7 @@ class AppleCalendarIntegration:
         Inicializar conexión con iCloud Calendar
         
         Args:
-            email: Email de iCloud (oskarpardo@proton.me)
+            email: Email de iCloud (tu_email@icloud.com)
             password: Contraseña de aplicación generada
             calendar_url: URL del servidor CalDAV de iCloud
         """
@@ -195,6 +195,112 @@ class AppleCalendarIntegration:
         else:
             return 1  # 1 hora por defecto
     
+    async def delete_event_by_title_and_date(self, title: str, target_date: datetime) -> bool:
+        """
+        Eliminar evento específico por título y fecha
+        
+        Args:
+            title: Título del evento a eliminar
+            target_date: Fecha específica del evento
+        
+        Returns:
+            True si se eliminó exitosamente
+        """
+        try:
+            if not self.calendar:
+                logger.error("❌ No hay conexión al calendario")
+                return False
+            
+            # Convertir a zona horaria de Chile para buscar
+            chile_tz = pytz.timezone('America/Santiago')
+            chile_date = target_date.replace(tzinfo=pytz.UTC).astimezone(chile_tz)
+            
+            # Buscar eventos en el día específico
+            start_of_day = chile_date.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_of_day = chile_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+            
+            # Obtener eventos del día
+            events = self.calendar.date_search(
+                start_of_day.astimezone(pytz.UTC),
+                end_of_day.astimezone(pytz.UTC)
+            )
+            
+            deleted_count = 0
+            for event in events:
+                try:
+                    # Obtener datos del evento
+                    event_data = event.data
+                    if hasattr(event_data, 'summary') and event_data.summary:
+                        event_title = str(event_data.summary)
+                        
+                        # Comparar títulos (case insensitive y parcial)
+                        if title.lower() in event_title.lower() or event_title.lower() in title.lower():
+                            event.delete()
+                            deleted_count += 1
+                            logger.info(f"🗑️ Evento eliminado de Apple Calendar: {event_title}")
+                            
+                except Exception as e:
+                    logger.warning(f"⚠️ Error procesando evento individual: {e}")
+                    continue
+            
+            if deleted_count > 0:
+                logger.info(f"✅ {deleted_count} eventos eliminados de Apple Calendar")
+                return True
+            else:
+                logger.warning(f"⚠️ No se encontraron eventos para eliminar: {title}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error eliminando evento de Apple Calendar: {e}")
+            return False
+    
+    async def delete_events_by_title_pattern(self, title_pattern: str, date_range_days: int = 365) -> int:
+        """
+        Eliminar múltiples eventos que coincidan con un patrón de título
+        
+        Args:
+            title_pattern: Patrón del título a buscar
+            date_range_days: Rango de días a buscar (default: 1 año)
+        
+        Returns:
+            Número de eventos eliminados
+        """
+        try:
+            if not self.calendar:
+                logger.error("❌ No hay conexión al calendario")
+                return 0
+            
+            # Rango de fechas para buscar
+            start_date = datetime.now(pytz.UTC)
+            end_date = start_date + timedelta(days=date_range_days)
+            
+            # Obtener eventos en el rango
+            events = self.calendar.date_search(start_date, end_date)
+            
+            deleted_count = 0
+            for event in events:
+                try:
+                    event_data = event.data
+                    if hasattr(event_data, 'summary') and event_data.summary:
+                        event_title = str(event_data.summary)
+                        
+                        # Comparar con patrón
+                        if title_pattern.lower() in event_title.lower():
+                            event.delete()
+                            deleted_count += 1
+                            logger.info(f"🗑️ Evento eliminado: {event_title}")
+                            
+                except Exception as e:
+                    logger.warning(f"⚠️ Error eliminando evento: {e}")
+                    continue
+            
+            logger.info(f"✅ {deleted_count} eventos eliminados de Apple Calendar")
+            return deleted_count
+                
+        except Exception as e:
+            logger.error(f"❌ Error eliminando eventos por patrón: {e}")
+            return 0
+    
     async def test_connection(self) -> Dict[str, Any]:
         """
         Probar la conexión y devolver información del calendario
@@ -232,6 +338,55 @@ class AppleCalendarIntegration:
                 "success": False,
                 "error": str(e)
             }
+    
+    async def update_event_title(self, old_title: str, new_title: str, date: datetime) -> bool:
+        """
+        Actualizar el título de un evento existente
+        
+        Args:
+            old_title: Título actual del evento
+            new_title: Nuevo título para el evento
+            date: Fecha del evento para ayudar a localizarlo
+        
+        Returns:
+            True si se actualizó exitosamente
+        """
+        try:
+            if not self.calendar:
+                logger.error("❌ No hay conexión al calendario")
+                return False
+            
+            # Buscar evento en un rango de ±1 día
+            search_start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+            search_end = search_start + timedelta(days=1)
+            
+            events = self.calendar.date_search(search_start, search_end)
+            
+            for event in events:
+                try:
+                    event_data = event.data
+                    if hasattr(event_data, 'summary') and event_data.summary:
+                        event_title = str(event_data.summary)
+                        
+                        # Verificar si coincide el título
+                        if old_title.lower() in event_title.lower():
+                            # Actualizar el título
+                            event_data.summary = new_title
+                            event.save()
+                            
+                            logger.info(f"✅ Evento actualizado en Apple Calendar: '{old_title}' → '{new_title}'")
+                            return True
+                            
+                except Exception as e:
+                    logger.warning(f"⚠️ Error procesando evento individual: {e}")
+                    continue
+            
+            logger.warning(f"⚠️ No se encontró evento para actualizar: {old_title}")
+            return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error actualizando evento en Apple Calendar: {e}")
+            return False
 
 
 # Instancia global (se inicializará en main.py)
@@ -271,6 +426,45 @@ async def initialize_apple_calendar(email: str, password: str) -> bool:
         logger.error(f"❌ Error inicializando Apple Calendar: {e}")
         apple_calendar = None
         return False
+
+
+async def delete_calendar_event(title: str, target_date: datetime) -> bool:
+    """
+    Eliminar evento específico de Apple Calendar (función de conveniencia)
+    
+    Args:
+        title: Título del evento
+        target_date: Fecha del evento
+    
+    Returns:
+        True si se eliminó exitosamente
+    """
+    global apple_calendar
+    
+    if not apple_calendar:
+        logger.warning("⚠️ Apple Calendar no inicializado")
+        return False
+    
+    return await apple_calendar.delete_event_by_title_and_date(title, target_date)
+
+
+async def delete_calendar_events_by_pattern(title_pattern: str) -> int:
+    """
+    Eliminar múltiples eventos de Apple Calendar por patrón
+    
+    Args:
+        title_pattern: Patrón del título a buscar
+    
+    Returns:
+        Número de eventos eliminados
+    """
+    global apple_calendar
+    
+    if not apple_calendar:
+        logger.warning("⚠️ Apple Calendar no inicializado")
+        return 0
+    
+    return await apple_calendar.delete_events_by_title_pattern(title_pattern)
 
 
 async def create_calendar_event(reminder_data: Dict[str, Any]) -> bool:

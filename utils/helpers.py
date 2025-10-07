@@ -176,3 +176,60 @@ def sanitize_input(text: str) -> str:
     sanitized = sanitized[:1000]
     
     return sanitized.strip()
+
+
+def parse_natural_date(text: str) -> Optional[datetime]:
+    """
+    Parsear fechas en lenguaje natural español
+    """
+    from datetime import datetime, timedelta
+    import pytz
+    
+    try:
+        now = datetime.now(pytz.timezone('America/Mexico_City'))
+        text_lower = text.lower().strip()
+        
+        # Patrones de fecha comunes
+        if 'mañana' in text_lower:
+            return now + timedelta(days=1)
+        elif 'hoy' in text_lower:
+            return now
+        elif 'pasado mañana' in text_lower:
+            return now + timedelta(days=2)
+        elif 'la próxima semana' in text_lower or 'próxima semana' in text_lower:
+            return now + timedelta(weeks=1)
+        elif 'el próximo mes' in text_lower or 'próximo mes' in text_lower:
+            return now + timedelta(days=30)
+        
+        # Días de la semana
+        weekdays = {
+            'lunes': 0, 'martes': 1, 'miércoles': 2, 'jueves': 3,
+            'viernes': 4, 'sábado': 5, 'domingo': 6
+        }
+        
+        for day_name, day_num in weekdays.items():
+            if day_name in text_lower:
+                days_ahead = day_num - now.weekday()
+                if days_ahead <= 0:  # Target day already happened this week
+                    days_ahead += 7
+                return now + timedelta(days=days_ahead)
+        
+        # Patrones de hora
+        time_match = re.search(r'(\d{1,2}):?(\d{2})?\s*(am|pm|h)', text_lower)
+        if time_match:
+            hour = int(time_match.group(1))
+            minute = int(time_match.group(2)) if time_match.group(2) else 0
+            period = time_match.group(3)
+            
+            if period == 'pm' and hour != 12:
+                hour += 12
+            elif period == 'am' and hour == 12:
+                hour = 0
+            
+            return now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        
+        # Si no se puede parsear, devolver None
+        return None
+        
+    except Exception:
+        return None

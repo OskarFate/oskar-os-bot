@@ -10,7 +10,7 @@ from database.connection import DatabaseManager
 from database.models import Reminder, ReminderStatus
 from config.settings import settings
 from utils.helpers import clean_reminder_text
-from bot.calendar_integration import create_calendar_event
+from bot.calendar_integration import create_calendar_event, delete_calendar_event, delete_calendar_events_by_pattern
 
 
 class ReminderManager:
@@ -124,6 +124,164 @@ class ReminderManager:
         except Exception as e:
             logger.error(f"❌ Error creando recordatorio: {e}")
             return False
+    
+    async def delete_reminder(self, user_id: int, reminder_id: str) -> bool:
+        """
+        Eliminar recordatorio específico con sincronización en Apple Calendar
+        
+        Args:
+            user_id: ID del usuario
+            reminder_id: ID del recordatorio a eliminar
+        
+        Returns:
+            True si se eliminó exitosamente
+        """
+        try:
+            # Obtener datos del recordatorio antes de eliminarlo
+            reminder = await self.db.get_reminder_by_id(reminder_id, user_id)
+            
+            if not reminder:
+                logger.warning(f"⚠️ Recordatorio no encontrado: {reminder_id}")
+                return False
+            
+            # Eliminar de la base de datos
+            success = await self.db.delete_reminder(reminder_id, user_id)
+            
+            if success:
+                logger.info(f"✅ Recordatorio eliminado de BD: {reminder.get('text', 'N/A')}")
+                
+                # Eliminar de Apple Calendar
+                try:
+                    calendar_success = await delete_calendar_event(
+                        reminder.get('text', ''),
+                        reminder.get('date')
+                    )
+                    if calendar_success:
+                        logger.info(f"📅 Evento eliminado de Apple Calendar")
+                    else:
+                        logger.warning(f"⚠️ No se pudo eliminar evento de Apple Calendar")
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ Error eliminando de Apple Calendar: {e}")
+                
+                return True
+            else:
+                logger.error(f"❌ Error eliminando recordatorio de BD")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error eliminando recordatorio: {e}")
+            return False
+    
+    async def delete_reminders_by_pattern(self, user_id: int, text_pattern: str) -> int:
+        """
+        Eliminar múltiples recordatorios que coincidan con un patrón
+        
+        Args:
+            user_id: ID del usuario
+            text_pattern: Patrón de texto a buscar
+        
+        Returns:
+            Número de recordatorios eliminados
+        """
+        try:
+            # Buscar recordatorios que coincidan
+            reminders = await self.db.search_reminders_by_text(user_id, text_pattern)
+            
+            deleted_count = 0
+            for reminder in reminders:
+                try:
+                    success = await self.delete_reminder(user_id, reminder['_id'])
+                    if success:
+                        deleted_count += 1
+                except Exception as e:
+                    logger.warning(f"⚠️ Error eliminando recordatorio individual: {e}")
+            
+            # También eliminar eventos de Apple Calendar por patrón
+            try:
+                calendar_deleted = await delete_calendar_events_by_pattern(text_pattern)
+                logger.info(f"📅 {calendar_deleted} eventos eliminados de Apple Calendar")
+            except Exception as e:
+                logger.warning(f"⚠️ Error eliminando eventos de calendario: {e}")
+            
+            logger.info(f"🗑️ {deleted_count} recordatorios eliminados por patrón: {text_pattern}")
+            return deleted_count
+            
+        except Exception as e:
+            logger.error(f"❌ Error eliminando recordatorios por patrón: {e}")
+            return 0
+    
+    async def delete_reminder_exceptions(self, text: str, user_id: int, exception_dates: List[str] = None, exception_weekdays: List[str] = None) -> bool:
+        """
+        Modificar recordatorio recurrente eliminando excepciones específicas
+        
+        Args:
+            text: Texto del recordatorio a modificar
+            user_id: ID del usuario
+            exception_dates: Lista de fechas específicas ISO a eliminar
+            exception_weekdays: Lista de días de la semana a eliminar siempre
+        
+        Returns:
+            True si se modificó exitosamente
+        """
+        try:
+            # Buscar recordatorios que coincidan con el texto
+            reminders = await self.db.search_reminders_by_text(user_id, text)
+            
+            if not reminders:
+                logger.warning(f"⚠️ No se encontraron recordatorios para modificar: {text}")
+                return False
+            
+            deleted_count = 0
+            
+            # Procesar excepciones por fechas específicas
+            if exception_dates:
+                for date_str in exception_dates:
+                    try:
+                        exception_date = datetime.fromisoformat(date_str.replace('Z', ''))
+                        
+                        # Buscar recordatorios en esa fecha específica
+                        for reminder in reminders:
+                            if reminder.date.date() == exception_date.date():
+                                success = await self.delete_reminder(text, user_id, reminder.date)
+                                if success:
+                                    deleted_count += 1
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error procesando fecha de excepción {date_str}: {e}")
+            
+            # Procesar excepciones por días de la semana
+            if exception_weekdays:
+                weekday_map = {
+                    'lunes': 0, 'martes': 1, 'miércoles': 2, 'miercoles': 2,
+                    'jueves': 3, 'viernes': 4, 'sábado': 5, 'sabado': 5, 'domingo': 6
+                }
+                
+                for weekday_name in exception_weekdays:
+                    target_weekday = weekday_map.get(weekday_name.lower())
+                    if target_weekday is not None:
+                        # Buscar recordatorios que caigan en ese día de la semana
+                        for reminder in reminders:
+                            if reminder.date.weekday() == target_weekday:
+                                success = await self.delete_reminder(text, user_id, reminder.date)
+                                if success:
+                                    deleted_count += 1
+            
+            if deleted_count > 0:
+                logger.info(f"✅ Modificado recordatorio con {deleted_count} excepciones: {text}")
+                return True
+            else:
+                logger.warning(f"⚠️ No se encontraron recordatorios para eliminar como excepción")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error modificando recordatorio con excepciones: {e}")
+            return False
+    
+    async def get_user_reminders(self, user_id: int, limit: int = 10) -> List[Reminder]:
+        """
+        Método alias para get_pending_reminders_for_user para compatibilidad
+        """
+        return await self.get_pending_reminders_for_user(user_id, limit)
     
     async def get_pending_reminders_for_user(self, user_id: int, limit: int = 10) -> List[Reminder]:
         """
@@ -371,3 +529,69 @@ class ReminderManager:
                 "missed": 0,
                 "reminders": []
             }
+    
+    async def modify_reminder(self, old_text: str, new_text: str, user_id: int) -> bool:
+        """
+        Modificar el texto de un recordatorio existente
+        
+        Args:
+            old_text: Texto actual del recordatorio a modificar
+            new_text: Nuevo texto para el recordatorio
+            user_id: ID del usuario
+            
+        Returns:
+            bool: True si se modificó exitosamente, False si no se encontró
+        """
+        try:
+            # Buscar recordatorio por texto
+            reminders = await self.db.search_reminders_by_text(user_id, old_text)
+            
+            if not reminders:
+                logger.warning(f"⚠️ No se encontró recordatorio con texto: {old_text}")
+                return False
+            
+            # Modificar el primer recordatorio encontrado
+            reminder = reminders[0]
+            old_reminder_text = reminder.text
+            
+            # Actualizar el recordatorio
+            success = await self.db.update_reminder_text(reminder.id, new_text)
+            
+            if success:
+                # Si hay integración con calendario, actualizar evento
+                if self.calendar_integration:
+                    try:
+                        # Buscar y actualizar evento en calendario
+                        await self.calendar_integration.update_event_title(
+                            old_title=old_reminder_text,
+                            new_title=new_text,
+                            date=reminder.date
+                        )
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error actualizando evento en calendario: {e}")
+                
+                logger.info(f"✅ Recordatorio modificado: '{old_text}' → '{new_text}'")
+                return True
+            else:
+                logger.error(f"❌ Error actualizando recordatorio en base de datos")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error modificando recordatorio: {e}")
+            return False
+
+    async def search_reminders(self, user_id: int, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Buscar recordatorios por texto
+        """
+        try:
+            # Usar el método existente de búsqueda
+            reminders = await self.db.search_reminders_by_text(user_id, query)
+            
+            # Limitar resultados
+            return reminders[:limit] if reminders else []
+            
+        except Exception as e:
+            logger.error(f"❌ Error buscando recordatorios: {e}")
+            return []
+            return False

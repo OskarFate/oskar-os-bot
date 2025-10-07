@@ -40,9 +40,9 @@
 En DigitalOcean App Platform, ir a Settings → Environment Variables:
 
 ```
-TELEGRAM_BOT_TOKEN=8250992220:AAFz2KkoUjqsoizJjFaskQQblYcEDTRlMdQ
-OPENROUTER_API_KEY=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
-MONGODB_CONNECTION_STRING=mongodb+srv://oskarfate_db_user:PaKMLWbPO8wWX6RT@secondbraincluster.2twy2ae.mongodb.net/?retryWrites=true&w=majority&appName=secondbraincluster
+TELEGRAM_BOT_TOKEN=[TU_BOT_TOKEN_AQUI]
+OPENROUTER_API_KEY=sk-or-v1-[TU_CLAVE_REAL_AQUI]
+MONGODB_CONNECTION_STRING=mongodb+srv://[TU_USUARIO]:[TU_PASSWORD]@[TU_CLUSTER].mongodb.net/?retryWrites=true&w=majority
 MONGODB_DATABASE_NAME=second_brain
 ENVIRONMENT=production
 LOG_LEVEL=INFO
