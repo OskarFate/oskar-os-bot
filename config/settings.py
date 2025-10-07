@@ -58,7 +58,7 @@ class Settings:
         required_vars = [
             ("TELEGRAM_BOT_TOKEN", self.TELEGRAM_BOT_TOKEN),
             ("OPENROUTER_API_KEY", self.OPENROUTER_API_KEY),
-            ("MONGODB_CONNECTION_STRING", self.MONGODB_CONNECTION_STRING),
+            ("MONGODB_URI", self.MONGODB_URI),
         ]
         
         missing_vars = [var_name for var_name, var_value in required_vars if not var_value]

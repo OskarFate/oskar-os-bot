@@ -31,7 +31,7 @@ async def main():
         logger.info("⚙️ Configuración cargada")
         
         # Inicializar base de datos
-        db_manager = DatabaseManager(settings.MONGODB_CONNECTION_STRING, settings.MONGODB_DATABASE_NAME)
+        db_manager = DatabaseManager(settings.MONGODB_URI, settings.MONGODB_DB_NAME)
         await db_manager.connect()
         logger.info("🗄️ Conexión a MongoDB establecida")
         
