@@ -139,11 +139,31 @@ CASOS QUE DEBES MANEJAR (SÚPER COMPLETOS):
    - "toda esta semana" (lunes actual), "todo el mes" (día 1 del mes siguiente)
    - "durante el verano", "en invierno", "época de exámenes"
 
-8. EVENTOS RECURRENTES Y FRECUENCIA:
-   - "todos los lunes" (próximo lunes), "cada viernes" (próximo viernes)
-   - "diariamente" (mañana misma hora), "semanalmente" (próxima semana)
-   - "mensualmente" (próximo mes), "anualmente" (próximo año)
-   - "every Monday", "daily", "weekly", "monthly"
+8. EVENTOS RECURRENTES Y FRECUENCIA (SÚPER EXPANDIDO):
+   - "todos los días" (diario), "every day" (diario), "daily" (diario)
+   - "todos los lunes" (semanal lunes), "every monday" (semanal lunes)
+   - "cada martes" (semanal martes), "todos los miércoles" (semanal miércoles)
+   - "día por medio" (cada 2 días), "día sí día no" (cada 2 días)
+   - "cada dos días" (cada 48h), "cada tercer día" (cada 72h)
+   - "cada semana" (semanal), "weekly" (semanal), "semanalmente" (semanal)
+   - "cada mes" (mensual), "monthly" (mensual), "mensualmente" (mensual)
+   - "cada año" (anual), "yearly" (anual), "anualmente" (anual)
+   - "fin de semana" (sábados), "weekends" (sábados)
+   - "entre semana" (lunes-viernes), "días laborables" (lunes-viernes)
+   - "lunes a viernes" (días hábiles), "monday to friday" (weekdays)
+   - "cada otra semana" (bi-semanal), "cada dos semanas" (cada 14 días)
+   - "cada 8 horas" (medicamentos), "cada 12 horas" (tratamiento)
+   - "cada 4 horas" (dolor), "cada 6 horas" (antibiótico)
+   - "mañana y noche" (2 veces al día), "3 veces al día" (cada 8h)
+
+IMPORTANTE PARA RECURRENCIA:
+- Si detectas patrón recurrente, crea MÚLTIPLES fechas
+- "todos los días" → próximos 7 días (1 semana)
+- "todos los lunes" → próximos 4 lunes (1 mes)
+- "cada semana" → próximas 4 semanas
+- "día por medio" → próximos 14 días (cada 2 días)
+- "cada mes" → próximos 6 meses
+- "fin de semana" → próximos 4 fines de semana
 
 9. EXPRESIONES ACADÉMICAS ESPECÍFICAS:
    - "mitad del semestre", "final de cuatrimestre", "inicio de clases"
@@ -257,7 +277,146 @@ Usuario: "early next month" → [día 3 del próximo mes a las 09:00]"""
             logger.error(f"❌ Error interpretando tiempo con IA: {e}")
             return None
     
-    async def parse_multiple_reminders(self, user_input: str, current_time: Optional[datetime] = None) -> List[Dict[str, Any]]:
+    async def parse_recurring_reminder(self, user_input: str, current_time: Optional[datetime] = None) -> List[Dict[str, Any]]:
+        """
+        Interpretar recordatorios recurrentes y generar múltiples fechas
+        
+        Args:
+            user_input: Input del usuario con patrón recurrente
+            current_time: Tiempo actual de referencia
+        
+        Returns:
+            Lista de recordatorios con fechas múltiples
+        """
+        if current_time is None:
+            current_time = datetime.utcnow()
+        
+        # Prompt específico para recurrencia
+        system_prompt = f"""Eres un experto en crear recordatorios recurrentes a partir de expresiones en español.
+
+FECHA ACTUAL: {current_time.strftime('%Y-%m-%d %H:%M:%S')}
+
+Tu tarea: Detectar si el mensaje contiene un patrón recurrente y generar múltiples fechas.
+
+PATRONES RECURRENTES QUE DEBES DETECTAR:
+
+1. FRECUENCIA DIARIA:
+   - "todos los días", "every day", "daily", "diario"
+   - "cada día", "cada mañana", "cada tarde", "cada noche"
+   → Genera 7 fechas (próximos 7 días)
+
+2. FRECUENCIA SEMANAL ESPECÍFICA:
+   - "todos los lunes", "every monday", "cada lunes"
+   - "todos los martes", "every tuesday", etc.
+   → Genera 4 fechas (próximos 4 lunes/martes/etc)
+
+3. FRECUENCIA PERSONALIZADA:
+   - "día por medio", "día sí día no", "cada dos días"
+   → Genera fechas cada 2 días (próximos 14 días)
+   - "cada tercer día", "cada 3 días"
+   → Genera fechas cada 3 días (próximos 21 días)
+
+4. FRECUENCIA SEMANAL GENERAL:
+   - "cada semana", "weekly", "semanal"
+   → Genera 4 fechas (próximas 4 semanas, mismo día)
+
+5. FRECUENCIA MENSUAL:
+   - "cada mes", "monthly", "mensual"
+   → Genera 3 fechas (próximos 3 meses, mismo día)
+
+6. RANGOS DE DÍAS:
+   - "lunes a viernes", "entre semana", "días laborables"
+   → Genera próximos 5 días hábiles
+   - "fin de semana", "weekends"
+   → Genera próximos 2 fines de semana (sábados)
+
+7. FRECUENCIA MÉDICA:
+   - "cada 8 horas", "cada 12 horas"
+   → Genera 7 fechas en intervalos específicos
+
+FORMATO DE RESPUESTA - SIEMPRE JSON:
+```json
+{{
+    "is_recurring": true,
+    "pattern": "descripción del patrón",
+    "base_activity": "actividad base extraída",
+    "reminders": [
+        {{"text": "actividad", "date": "YYYY-MM-DDTHH:MM:SSZ"}},
+        {{"text": "actividad", "date": "YYYY-MM-DDTHH:MM:SSZ"}},
+        {{"text": "actividad", "date": "YYYY-MM-DDTHH:MM:SSZ"}}
+    ]
+}}
+```
+
+Si NO es recurrente, responde:
+```json
+{{"is_recurring": false}}
+```
+
+EJEMPLOS:
+Usuario: "recuérdame tomar pastilla todos los días a las 8"
+→ Generar 7 recordatorios (próximos 7 días a las 08:00)
+
+Usuario: "ejercitar todos los lunes"
+→ Generar 4 recordatorios (próximos 4 lunes a las 07:00)
+
+Usuario: "reunión cada semana"
+→ Generar 4 recordatorios (próximas 4 semanas, mismo día/hora)
+
+Usuario: "día por medio revisar email"
+→ Generar recordatorios cada 2 días (próximos 14 días)
+
+¡SÉ INTELIGENTE Y DETECTA CUALQUIER PATRÓN RECURRENTE!"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Analizar recurrencia: '{user_input}'"}
+        ]
+        
+        try:
+            result = await self._make_api_call(messages, temperature=0.2)
+            
+            if not result:
+                return []
+            
+            # Limpiar respuesta para obtener solo el JSON
+            result = result.strip()
+            if result.startswith('```json'):
+                result = result[7:-3].strip()
+            elif result.startswith('```'):
+                result = result[3:-3].strip()
+            
+            # Parsear JSON
+            parsed_result = json.loads(result)
+            
+            if not parsed_result.get("is_recurring", False):
+                return []
+            
+            # Validar y convertir fechas
+            valid_reminders = []
+            reminders = parsed_result.get("reminders", [])
+            
+            for reminder in reminders:
+                try:
+                    if 'text' in reminder and 'date' in reminder:
+                        date_str = reminder['date']
+                        if date_str.endswith('Z'):
+                            parsed_date = datetime.fromisoformat(date_str[:-1])
+                            valid_reminders.append({
+                                'text': reminder['text'],
+                                'date': parsed_date
+                            })
+                except Exception as e:
+                    logger.warning(f"⚠️ Error parseando recordatorio recurrente: {e}")
+                    continue
+            
+            pattern = parsed_result.get("pattern", "recurrente")
+            logger.info(f"🔄 Recordatorios recurrentes detectados: {len(valid_reminders)} ({pattern})")
+            return valid_reminders
+            
+        except Exception as e:
+            logger.error(f"❌ Error parseando recordatorios recurrentes: {e}")
+            return []
         """
         Interpretar múltiples recordatorios en un solo mensaje
         

@@ -453,10 +453,19 @@ Simplemente escribe algo como:
 🧠 **¿Qué puedo hacer?**
 Soy tu asistente personal con IA para recordatorios y notas.
 
-⏰ **Recordatorios:**
+⏰ **Recordatorios simples:**
 • `/recordar llamar médico mañana 9am`
 • "Recuérdame entregar proyecto en 3 días"
-• `/listar` - Ver próximos recordatorios
+• "mañana a las 8 ir al gym"
+
+🔄 **Recordatorios recurrentes (¡NUEVO!):**
+• "tomar pastilla todos los días a las 8"
+• "ejercitar todos los lunes"
+• "reunión cada semana"
+• "día por medio revisar email"
+• "medicamento cada 8 horas"
+• "backup cada mes"
+• "llamar mamá todos los domingos"
 
 📝 **Notas:**
 • `/nota Idea: crear app productividad`
@@ -464,20 +473,28 @@ Soy tu asistente personal con IA para recordatorios y notas.
 • Clasificación automática por IA
 
 📊 **Análisis:**
+• `/listar` - Ver próximos recordatorios
 • `/resumen` - Resumen semanal con IA
 • `/status` - Estado del sistema
 
 🔥 **Características únicas:**
-• Interpreto lenguaje natural
-• Pre-recordatorios automáticos (7d, 2d, 1d)
+• Interpreto lenguaje natural y modismos chilenos
+• Recordatorios recurrentes automáticos
+• Pre-recordatorios (7d, 2d, 1d)
 • Búsqueda semántica inteligente
 • Aprendo tus patrones y preferencias
 
+🇨🇱 **Lenguaje chileno:**
+• "al tiro comprar pan"
+• "lueguito llamar jefe"
+• "tempranito ejercitar"
+
 💡 **Ejemplos prácticos:**
 1. "Recuérdame ir al gym en 2 horas"
-2. "/nota Reflexión: el proyecto va bien"
-3. "/buscar ideas de vacaciones"
-4. "/resumen" para ver tu semana
+2. "pastillas todos los días 8am"
+3. "/nota Reflexión: el proyecto va bien"
+4. "/buscar ideas de vacaciones"
+5. "/resumen" para ver tu semana
 
 ¿Necesitas algo específico? ¡Solo pregúntame! 😊"""
 
@@ -696,10 +713,29 @@ Soy tu asistente personal con IA para recordatorios y notas.
             r'de\s+\d+\s+a\s+\d+',
             r'from\s+\d+\s+to\s+\d+',
             
-            # Frecuencia
-            r'cada\s+\d+\s+(minutos?|horas?|días?)',
-            r'todos?\s+los?\s+(lunes|martes|miércoles|jueves|viernes)',
-            r'every\s+\d+\s+(minutes?|hours?|days?)',
+            # PATRONES RECURRENTES (NUEVOS)
+            r'cada\s+\d+\s+(minutos?|horas?|días?|semanas?|meses?)',
+            r'todos?\s+los?\s+(días?|lunes|martes|miércoles|jueves|viernes|sábados?|domingos?)',
+            r'todas?\s+las?\s+(mañanas?|tardes?|noches?|semanas?)',
+            r'every\s+\d+\s+(minutes?|hours?|days?|weeks?|months?)',
+            r'every\s+(day|monday|tuesday|wednesday|thursday|friday|saturday|sunday)',
+            r'daily|weekly|monthly|yearly',
+            r'diario|semanal|mensual|anual',
+            r'día\s+por\s+medio',
+            r'día\s+sí\s+día\s+no',
+            r'inter\s?diario',
+            r'cada\s+dos\s+días',
+            r'cada\s+tercer\s+día',
+            r'cada\s+otra\s+semana',
+            r'cada\s+dos\s+semanas',
+            r'fin\s+de\s+semana',
+            r'días?\s+laborables?',
+            r'días?\s+hábiles?',
+            r'entre\s+semana',
+            r'lunes\s+a\s+viernes',
+            r'monday\s+to\s+friday',
+            r'weekdays?',
+            r'weekends?',
         ]
         
         # Patrones de contexto de actividad (nuevo)
@@ -777,6 +813,30 @@ Soy tu asistente personal con IA para recordatorios y notas.
             "cuándo", "when", "qué hora", "what time", "a qué hora", "at what time"
         ]) and len(text.split()) > 2
         
+        # 11. NUEVO: Detectar patrones recurrentes específicos
+        has_recurring_pattern = any(phrase in text_lower for phrase in [
+            "todos los días", "every day", "daily", "diario", "diariamente",
+            "cada día", "cada mañana", "cada tarde", "cada noche",
+            "todos los lunes", "todos los martes", "todos los miércoles", 
+            "todos los jueves", "todos los viernes", "todos los sábados", "todos los domingos",
+            "every monday", "every tuesday", "every wednesday", "every thursday", 
+            "every friday", "every saturday", "every sunday",
+            "día por medio", "día sí día no", "cada dos días", "cada tercer día",
+            "cada semana", "weekly", "semanal", "semanalmente",
+            "cada mes", "monthly", "mensual", "mensualmente",
+            "fin de semana", "weekends", "entre semana", "días laborables",
+            "lunes a viernes", "monday to friday", "weekdays",
+            "cada otra semana", "cada dos semanas", "bi-weekly"
+        ])
+        
+        # 12. Detectar frecuencia numérica (cada X tiempo)
+        has_numeric_frequency = any(re.search(pattern, text_lower) for pattern in [
+            r'cada\s+\d+\s+(minutos?|horas?|días?|semanas?|meses?)',
+            r'every\s+\d+\s+(minutes?|hours?|days?|weeks?|months?)',
+            r'cada\s+\d+h',  # cada 8h
+            r'cada\s+\d+hrs?',  # cada 12hrs
+        ])
+        
         # Es recordatorio si cumple cualquiera de estos criterios:
         is_reminder = (
             has_reminder_keywords or
@@ -787,7 +847,9 @@ Soy tu asistente personal con IA para recordatorios y notas.
             (has_activity_context and (has_date_pattern or has_time_relative)) or
             (has_imperative and (has_date_pattern or has_time_relative or len(text) > 20)) or
             (has_list_format and (has_date_pattern or has_academic_pattern)) or
-            (has_time_question and has_activity_context)
+            (has_time_question and has_activity_context) or
+            has_recurring_pattern or  # NUEVO: Patrones recurrentes
+            (has_numeric_frequency and has_activity_context)  # NUEVO: Frecuencia numérica con contexto
         )
         
         # Log para debugging (más detallado)
@@ -796,17 +858,79 @@ Soy tu asistente personal con IA para recordatorios y notas.
                        f"keywords={has_reminder_keywords}, date={has_date_pattern}, "
                        f"academic={has_academic_pattern}, relative={has_time_relative}, "
                        f"activity={has_activity_context}, imperative={has_imperative}, "
-                       f"list={has_list_format}, question={has_time_question}")
+                       f"list={has_list_format}, question={has_time_question}, "
+                       f"recurring={has_recurring_pattern}, frequency={has_numeric_frequency}")
         
         return is_reminder
     
     async def _process_reminder_request(self, message: Message, reminder_input: str):
-        """Procesar solicitud de recordatorio - Usa IA inteligente con fallback"""
+        """Procesar solicitud de recordatorio - Sistema inteligente con recurrencia"""
         try:
             # Mostrar mensaje de procesamiento
             processing_msg = await message.answer("🤖 Interpretando con IA...")
             
-            # PRIMERO: Intentar con prompt académico (múltiples recordatorios)
+            # PRIMERO: Verificar si es un recordatorio recurrente
+            recurring_reminders = await self.ai_interpreter.parse_recurring_reminder(reminder_input)
+            
+            if recurring_reminders:
+                # Procesar recordatorios recurrentes
+                created_count = 0
+                failed_count = 0
+                
+                for reminder_data in recurring_reminders:
+                    try:
+                        # Mejorar texto del recordatorio individual
+                        context = await self.memory_index.get_user_context(message.from_user.id, limit=3)
+                        enhanced_text = await self.ai_interpreter.enhance_reminder_text(reminder_data['text'], context)
+                        
+                        # Crear recordatorio
+                        success = await self.reminder_manager.create_reminder(
+                            user_id=message.from_user.id,
+                            original_input=reminder_data['text'],
+                            reminder_text=enhanced_text,
+                            target_date=reminder_data['date']
+                        )
+                        
+                        if success:
+                            created_count += 1
+                        else:
+                            failed_count += 1
+                            
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error creando recordatorio recurrente: {e}")
+                        failed_count += 1
+                
+                # Respuesta para recordatorios recurrentes
+                if created_count > 0:
+                    result_text = f"🔄 **{created_count} recordatorios recurrentes creados**\n\n"
+                    
+                    # Mostrar algunos ejemplos
+                    for i, reminder_data in enumerate(recurring_reminders[:3], 1):
+                        date_str = format_datetime_for_user(reminder_data['date'])
+                        result_text += f"{i}. {reminder_data['text']}\n   📅 {date_str}\n"
+                    
+                    if len(recurring_reminders) > 3:
+                        result_text += f"   ... y {len(recurring_reminders) - 3} más\n"
+                    
+                    result_text += "\n🔔 Todos incluyen pre-recordatorios automáticos"
+                    
+                    if failed_count > 0:
+                        result_text += f"\n\n⚠️ {failed_count} recordatorios fallaron"
+                    
+                    # Agregar a memoria
+                    await self.memory_index.add_context(
+                        message.from_user.id,
+                        f"Creó {created_count} recordatorios recurrentes: {reminder_input[:50]}",
+                        "recurring_reminder"
+                    )
+                    
+                    await processing_msg.edit_text(result_text, parse_mode="Markdown")
+                    return
+                else:
+                    # Si falló todo, continuar con método normal
+                    pass
+            
+            # SEGUNDO: Intentar con prompt académico (múltiples recordatorios)
             reminders = await self.ai_interpreter.parse_multiple_reminders(reminder_input)
             
             if reminders:
