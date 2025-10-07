@@ -1,0 +1,49 @@
+# DigitalOcean App Platform Configuration
+# This file configures your app for deployment on DigitalOcean App Platform
+# See: https://docs.digitalocean.com/products/app-platform/reference/app-spec/
+
+name: oskaros-assistant-bot
+services:
+- name: oskaros-bot
+  source_dir: /
+  github:
+    repo: your-username/oskaros-bot
+    branch: main
+  run_command: python main.py
+  environment_slug: python
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  
+  # Environment variables (set these in DigitalOcean dashboard)
+  envs:
+  - key: TELEGRAM_BOT_TOKEN
+    scope: RUN_TIME
+    type: SECRET
+  - key: OPENROUTER_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: MONGODB_CONNECTION_STRING
+    scope: RUN_TIME
+    type: SECRET
+  - key: MONGODB_DATABASE_NAME
+    scope: RUN_TIME
+    value: second_brain
+  - key: ENVIRONMENT
+    scope: RUN_TIME
+    value: production
+  - key: LOG_LEVEL
+    scope: RUN_TIME
+    value: INFO
+  - key: DEFAULT_TIMEZONE
+    scope: RUN_TIME
+    value: America/Santiago
+
+  # Health check
+  health_check:
+    http_path: /health
+
+# Database (if you want to use DigitalOcean managed MongoDB)
+# databases:
+# - name: oskaros-db
+#   engine: MONGODB
+#   version: "5"

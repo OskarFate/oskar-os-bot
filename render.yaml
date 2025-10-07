@@ -1,0 +1,31 @@
+# Render.com deployment configuration
+# See: https://render.com/docs/deploy-python
+
+# Build command (automatically detected from requirements.txt)
+# pip install -r requirements.txt
+
+# Start command
+# python main.py
+
+services:
+  - type: web
+    name: oskaros-bot
+    env: python
+    repo: https://github.com/yourusername/oskaros-bot.git
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: MONGODB_CONNECTION_STRING
+        sync: false
+      - key: MONGODB_DATABASE_NAME
+        value: oskaros_bot
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: DEFAULT_TIMEZONE
+        value: UTC

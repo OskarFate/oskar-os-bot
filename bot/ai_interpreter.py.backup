@@ -1,0 +1,433 @@
+"""
+Intérprete de IA usando Llama 3.3 70B via OpenRouter
+"""
+
+import json
+from datetime import datetime, timedelta
+from typing import Optional, Dict, Any, List
+import aiohttp
+import asyncio
+import pytz
+from loguru import logger
+
+from config.settings import settings
+from utils.helpers import parse_simple_time_expressions
+
+
+c            logger.info(f"🔍 Búsqueda semántica: '{query}' -> {len(relevant_notes)} resultados")
+            return relevant_notes
+            
+        except Exception as e:
+            logger.error(f"❌ Error en búsqueda semántica: {e}")
+            # Fallback a búsqueda simple
+            query_lower = query.lower()
+            simple_results = [
+                note for note in notes 
+                if query_lower in note.get('text', '').lower()
+            ]
+            return simple_results[:5]
+    
+    async def parse_multiple_reminders(self, user_input: str, current_time: Optional[datetime] = None) -> List[Dict[str, Any]]:
+        """
+        Interpretar múltiples recordatorios en un solo mensaje
+        
+        Args:
+            user_input: Texto del usuario con múltiples fechas y eventos
+            current_time: Tiempo actual
+        
+        Returns:
+            Lista de diccionarios con 'text' y 'date' para cada recordatorio
+        """
+        if current_time is None:
+            chile_tz = pytz.timezone('America/Santiago')
+            current_time = datetime.now(chile_tz).astimezone(pytz.UTC).replace(tzinfo=None)
+        
+        system_prompt = f"""Eres un experto en extraer múltiples recordatorios de un texto.
+
+Fecha y hora actual: {current_time.strftime('%Y-%m-%d %H:%M:%S UTC')}
+
+Tu tarea: Extraer cada recordatorio del texto del usuario y convertir las fechas a formato ISO8601 UTC.
+
+Formato de respuesta (JSON):
+[
+  {{"text": "descripción del evento", "date": "YYYY-MM-DDTHH:MM:SSZ"}},
+  {{"text": "otro evento", "date": "YYYY-MM-DDTHH:MM:SSZ"}}
+]
+
+Reglas:
+1. Cada línea/evento es un recordatorio separado
+2. Si no hay hora específica, usa 09:00 para horarios de día
+3. Para evaluaciones usa 08:00 (inicio de día académico)
+4. Convierte fechas del formato DD/MM/YYYY al formato ISO8601
+5. Si no puedes interpretar alguna fecha, omite ese recordatorio
+6. Responde SOLO el JSON válido
+
+Ejemplo:
+Entrada: "marketing: Evaluación escrita 12/09/2025\nReunión importante 15/10/2025"
+Salida: [{{"text": "marketing: Evaluación escrita", "date": "2025-09-12T08:00:00Z"}}, {{"text": "Reunión importante", "date": "2025-10-15T09:00:00Z"}}]"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Texto con múltiples recordatorios:\n{user_input}"}
+        ]
+        
+        try:
+            result = await self._make_api_call(messages, temperature=0.2)
+            
+            if not result:
+                logger.warning(f"⚠️ IA no devolvió resultado para múltiples recordatorios")
+                return []
+            
+            # Limpiar respuesta para obtener solo el JSON
+            result = result.strip()
+            if result.startswith('```json'):
+                result = result[7:-3].strip()
+            elif result.startswith('```'):
+                result = result[3:-3].strip()
+            
+            # Parsear JSON
+            import json
+            reminders = json.loads(result)
+            
+            # Validar y convertir fechas
+            valid_reminders = []
+            for reminder in reminders:
+                try:
+                    if 'text' in reminder and 'date' in reminder:
+                        date_str = reminder['date']
+                        if date_str.endswith('Z'):
+                            parsed_date = datetime.fromisoformat(date_str[:-1])
+                            valid_reminders.append({
+                                'text': reminder['text'],
+                                'date': parsed_date
+                            })
+                except Exception as e:
+                    logger.warning(f"⚠️ Error parseando recordatorio individual: {e}")
+                    continue
+            
+            logger.info(f"🎯 Múltiples recordatorios extraídos: {len(valid_reminders)} válidos")
+            return valid_reminders
+            
+        except Exception as e:
+            logger.error(f"❌ Error parseando múltiples recordatorios: {e}")
+            return []preter:
+    """Intérprete de IA para procesar lenguaje natural"""
+    
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.api_url = settings.OPENROUTER_API_URL
+        self.model = settings.LLAMA_MODEL
+        self.timeout = settings.AI_TIMEOUT_SECONDS
+        
+    async def _make_api_call(self, messages: List[Dict[str, str]], temperature: float = None) -> Optional[str]:
+        """Hacer llamada a la API de OpenRouter"""
+        if temperature is None:
+            temperature = settings.AI_TEMPERATURE
+            
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/yourusername/oskaros-bot",  # Opcional
+            "X-Title": "OskarOS Assistant Bot"  # Opcional
+        }
+        
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": settings.AI_MAX_TOKENS,
+            "stream": False
+        }
+        
+        try:
+            timeout = aiohttp.ClientTimeout(total=self.timeout)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(self.api_url, headers=headers, json=payload) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        return data["choices"][0]["message"]["content"].strip()
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"Error API OpenRouter {response.status}: {error_text}")
+                        return None
+                        
+        except asyncio.TimeoutError:
+            logger.error("⏱️ Timeout en llamada a OpenRouter")
+            return None
+        except Exception as e:
+            logger.error(f"❌ Error en llamada a OpenRouter: {e}")
+            return None
+    
+    async def interpret_time_expression(self, user_input: str, current_time: Optional[datetime] = None) -> Optional[datetime]:
+        """
+        Interpretar expresión temporal en lenguaje natural
+        
+        Args:
+            user_input: Texto del usuario (ej: "en 3 horas", "mañana a las 9")
+            current_time: Tiempo actual (en zona horaria de Chile)
+        
+        Returns:
+            datetime en UTC o None si no se puede interpretar
+        """
+        if current_time is None:
+            # Obtener hora actual de Chile y convertir a UTC para almacenamiento
+            chile_tz = pytz.timezone('America/Santiago')
+            current_time = datetime.now(chile_tz).astimezone(pytz.UTC).replace(tzinfo=None)
+        
+        # Intentar parser básico primero (más rápido)
+        basic_result = parse_simple_time_expressions(user_input, current_time)
+        if basic_result:
+            logger.info(f"⚡ Interpretación básica exitosa: {user_input} -> {basic_result}")
+            return basic_result
+        
+        # Usar IA para casos complejos
+        system_prompt = f"""Eres un experto en interpretar expresiones temporales en español.
+
+Fecha y hora actual: {current_time.strftime('%Y-%m-%d %H:%M:%S UTC')}
+
+Tu tarea: Convertir la expresión temporal del usuario a formato ISO8601 UTC.
+
+Reglas:
+1. Responde SOLO con la fecha en formato: YYYY-MM-DDTHH:MM:SSZ
+2. Si no hay hora específica, usa 09:00 para "mañana" o horarios de día
+3. Para "noche" usa 20:00, para "tarde" usa 15:00
+4. Si la expresión es ambigua, elige la interpretación más próxima en el futuro
+5. Si no puedes interpretarla, responde: ERROR
+
+Ejemplos:
+Usuario: "en 10 segundos" -> {(current_time + timedelta(seconds=10)).strftime('%Y-%m-%dT%H:%M:%SZ')}
+Usuario: "mañana a las 9" -> {(current_time + timedelta(days=1)).replace(hour=9, minute=0, second=0).strftime('%Y-%m-%dT%H:%M:%SZ')}
+Usuario: "el 25 de octubre a las 18:00" -> 2025-10-25T18:00:00Z"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Expresión temporal: '{user_input}'"}
+        ]
+        
+        try:
+            result = await self._make_api_call(messages, temperature=0.3)
+            
+            if not result or result.strip() == "ERROR":
+                logger.warning(f"⚠️ IA no pudo interpretar: {user_input}")
+                return None
+            
+            # Parsear respuesta ISO8601
+            result = result.strip()
+            if result.endswith('Z'):
+                parsed_time = datetime.fromisoformat(result[:-1])  # Remover Z
+                logger.info(f"🤖 IA interpretó: {user_input} -> {parsed_time}")
+                return parsed_time
+            else:
+                logger.error(f"❌ Formato inválido de IA: {result}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"❌ Error interpretando tiempo con IA: {e}")
+            return None
+    
+    async def enhance_reminder_text(self, user_input: str, context: Optional[List[str]] = None) -> str:
+        """
+        Mejorar texto de recordatorio con contexto
+        
+        Args:
+            user_input: Input original del usuario
+            context: Contexto previo del usuario
+        
+        Returns:
+            Texto mejorado del recordatorio
+        """
+        context_str = ""
+        if context:
+            context_str = f"\nContexto del usuario:\n" + "\n".join(f"- {ctx}" for ctx in context)
+        
+        system_prompt = f"""Eres un asistente que mejora recordatorios ambiguos.
+
+Tu tarea: Completar o clarificar el recordatorio del usuario manteniendo su intención original.
+
+Reglas:
+1. Si el recordatorio es claro, devuélvelo tal como está
+2. Si es ambiguo (ej: "lo del profe"), agregar contexto útil
+3. Mantener el tono y estilo del usuario
+4. No agregar información que el usuario no solicitó
+5. Máximo 100 caracteres adicionales
+
+{context_str}"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Recordatorio: '{user_input}'"}
+        ]
+        
+        try:
+            result = await self._make_api_call(messages, temperature=0.4)
+            
+            if result and len(result.strip()) > 0:
+                enhanced = result.strip()
+                logger.info(f"✨ Recordatorio mejorado: '{user_input}' -> '{enhanced}'")
+                return enhanced
+            else:
+                return user_input
+                
+        except Exception as e:
+            logger.error(f"❌ Error mejorando recordatorio: {e}")
+            return user_input
+    
+    async def classify_note(self, note_text: str) -> Dict[str, Any]:
+        """
+        Clasificar nota automáticamente
+        
+        Args:
+            note_text: Texto de la nota
+        
+        Returns:
+            Dict con tema, prioridad, sentimiento y tags
+        """
+        system_prompt = """Analiza la nota del usuario y clasifícala.
+
+Responde en formato JSON con estas claves:
+- "tags": lista de 2-5 palabras clave relevantes
+- "priority": "low", "medium" o "high"
+- "sentiment": "positive", "negative" o "neutral"
+- "category": "idea", "task", "thought" o "general"
+
+Ejemplo:
+{"tags": ["trabajo", "urgente"], "priority": "high", "sentiment": "neutral", "category": "task"}"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Nota: '{note_text}'"}
+        ]
+        
+        try:
+            result = await self._make_api_call(messages, temperature=0.3)
+            
+            if result:
+                # Intentar parsear JSON
+                classification = json.loads(result.strip())
+                logger.info(f"🏷️ Nota clasificada: {classification}")
+                return classification
+            else:
+                return {"tags": [], "priority": "medium", "sentiment": "neutral", "category": "general"}
+                
+        except json.JSONDecodeError:
+            logger.error(f"❌ Error parseando clasificación JSON: {result}")
+            return {"tags": [], "priority": "medium", "sentiment": "neutral", "category": "general"}
+        except Exception as e:
+            logger.error(f"❌ Error clasificando nota: {e}")
+            return {"tags": [], "priority": "medium", "sentiment": "neutral", "category": "general"}
+    
+    async def generate_weekly_summary(self, reminders: List[Dict], notes: List[Dict], user_name: str = "Usuario") -> str:
+        """
+        Generar resumen semanal con IA
+        
+        Args:
+            reminders: Lista de recordatorios de la semana
+            notes: Lista de notas de la semana
+            user_name: Nombre del usuario
+        
+        Returns:
+            Resumen en formato markdown
+        """
+        # Preparar datos
+        reminders_text = "\n".join([f"- {r.get('text', 'Sin texto')} ({r.get('status', 'unknown')})" for r in reminders])
+        notes_text = "\n".join([f"- {n.get('text', 'Sin texto')}" for n in notes])
+        
+        system_prompt = f"""Genera un resumen semanal personalizado para {user_name}.
+
+Datos de la semana:
+
+RECORDATORIOS:
+{reminders_text if reminders_text else "Sin recordatorios"}
+
+NOTAS:
+{notes_text if notes_text else "Sin notas"}
+
+Instrucciones:
+1. Crea un resumen amigable y motivador
+2. Destaca logros y patrones positivos
+3. Sugiere mejoras si es apropiado
+4. Usa formato markdown
+5. Máximo 300 palabras
+6. Tono conversacional y empático"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "Genera mi resumen semanal"}
+        ]
+        
+        try:
+            result = await self._make_api_call(messages, temperature=0.6)
+            
+            if result:
+                logger.info(f"📊 Resumen semanal generado para {user_name}")
+                return result.strip()
+            else:
+                return f"## Resumen de la semana\n\n¡Hola {user_name}! 👋\n\nEsta semana tuviste **{len(reminders)} recordatorios** y guardaste **{len(notes)} notas**.\n\n¡Sigue así! 💪"
+                
+        except Exception as e:
+            logger.error(f"❌ Error generando resumen: {e}")
+            return f"## Resumen de la semana\n\n¡Hola {user_name}! 👋\n\nEsta semana tuviste **{len(reminders)} recordatorios** y guardaste **{len(notes)} notas**.\n\n¡Sigue así! 💪"
+    
+    async def search_notes_semantically(self, query: str, notes: List[Dict]) -> List[Dict]:
+        """
+        Búsqueda semántica de notas usando IA
+        
+        Args:
+            query: Consulta del usuario
+            notes: Lista de notas disponibles
+        
+        Returns:
+            Lista ordenada de notas relevantes
+        """
+        if not notes:
+            return []
+        
+        # Preparar notas para análisis
+        notes_text = ""
+        for i, note in enumerate(notes):
+            notes_text += f"{i}: {note.get('text', 'Sin texto')}\n"
+        
+        system_prompt = f"""Busca las notas más relevantes para la consulta del usuario.
+
+NOTAS DISPONIBLES:
+{notes_text}
+
+Instrucciones:
+1. Analiza semánticamente la consulta vs las notas
+2. Responde con los números de las notas relevantes (más relevante primero)
+3. Formato: solo números separados por comas (ej: "2,5,1")
+4. Si no hay coincidencias relevantes, responde: "NONE"
+5. Máximo 5 resultados"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Buscar: '{query}'"}
+        ]
+        
+        try:
+            result = await self._make_api_call(messages, temperature=0.3)
+            
+            if not result or result.strip() == "NONE":
+                return []
+            
+            # Parsear índices
+            indices = [int(x.strip()) for x in result.strip().split(',') if x.strip().isdigit()]
+            
+            # Retornar notas ordenadas por relevancia
+            relevant_notes = []
+            for idx in indices:
+                if 0 <= idx < len(notes):
+                    relevant_notes.append(notes[idx])
+            
+            logger.info(f"🔍 Búsqueda semántica: '{query}' -> {len(relevant_notes)} resultados")
+            return relevant_notes
+            
+        except Exception as e:
+            logger.error(f"❌ Error en búsqueda semántica: {e}")
+            # Fallback a búsqueda simple
+            query_lower = query.lower()
+            simple_results = [
+                note for note in notes 
+                if query_lower in note.get('text', '').lower()
+            ]
+            return simple_results[:5]
